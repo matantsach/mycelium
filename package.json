@@ -6,7 +6,16 @@
     "name": "Matan Tsach",
     "url": "https://github.com/matantsach"
   },
+  "type": "commonjs",
+  "main": "dist/mcp-server/index.js",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/matantsach/mycelium.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "keywords": [
     "multi-agent",
     "mcp",

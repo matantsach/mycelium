@@ -6,6 +6,8 @@
     "name": "Matan Tsach",
     "url": "https://github.com/matantsach"
   },
+  "homepage": "https://github.com/matantsach/mycelium",
+  "repository": "https://github.com/matantsach/mycelium",
   "license": "MIT",
   "keywords": [
     "multi-agent",
