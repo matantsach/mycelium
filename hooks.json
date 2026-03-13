@@ -1,0 +1,14 @@
+{
+  "hooks": [
+    {
+      "event": "sessionStart",
+      "command": "node dist/hooks/context-loader.js",
+      "timeout": 5000
+    },
+    {
+      "event": "postToolUse",
+      "command": "node dist/hooks/nudge-messages.js",
+      "timeout": 3000
+    }
+  ]
+}

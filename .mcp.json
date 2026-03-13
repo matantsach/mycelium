@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "mycelium": {
+      "command": "node",
+      "args": ["dist/mcp-server/index.js"],
+      "env": {
+        "MYCELIUM_PROJECT_ROOT": "${workspaceFolder}"
+      }
+    }
+  }
+}
