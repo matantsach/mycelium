@@ -67,11 +67,13 @@ Appends a single JSON line to `{missionPath}/audit.jsonl` using `fs.appendFileSy
 
 ### Tool Changes
 
-All 4 task tool handlers receive `basePath` (passed through from `registerTaskTools` signature change). After a successful SQLite mutation:
+All 4 task tool handlers receive `basePath` (passed through from `registerTaskTools` signature change). Each handler constructs `missionPath` as `path.join(basePath, "missions", mission_id)`. After a successful SQLite mutation:
 
-1. Call `findTaskFile()` to locate the task markdown file
+1. Call `findTaskFile(missionPath, taskId)` to locate the task markdown file
 2. Call `updateTaskFileFrontmatter()` to sync status, assigned_to, claimed_at, completed_at
-3. Call `appendAuditEntry()` with the appropriate action
+3. Call `appendAuditEntry(missionPath, entry)` with the appropriate action
+
+If the filesystem write fails (disk full, permissions), the error is logged but non-fatal — SQLite is the status authority per the dual-write rule. The SQLite transaction has already committed; the filesystem will reconcile on the next operation that reads the task file.
 
 `create_team` also gets audit logging (`mission_create` action). It already does filesystem dual-write.
 
@@ -104,9 +106,9 @@ All 4 task tool handlers receive `basePath` (passed through from `registerTaskTo
 
 1. Reads `MYCELIUM_AGENT_ID` and `MYCELIUM_MISSION_ID` env vars
 2. If no env vars -> captain session -> exit silently (unrestricted)
-3. Reads hook input from stdin (JSON with `toolName` and `input` fields)
+3. Reads hook input from stdin as JSON. Expected schema: `{ "toolName": string, "input": { [key: string]: unknown } }`. The `input` object contains the tool's arguments as passed by the runtime. If stdin is empty or unparseable, exit silently (allow).
 4. If `toolName` is not a file-mutation tool -> exit silently (allow)
-5. Extracts file path from tool input args
+5. Extracts file path from `input` using the runtime tool mapping below
 6. Finds the agent's in-progress task file: scans `tasks/*.md` for `assigned_to: {agentId}` and `status: in_progress`
 7. Reads `scope` field from task frontmatter (array of file paths/globs)
 8. If file path matches any scope entry -> exit silently (allow)
@@ -262,7 +264,6 @@ The `reject_task` MCP tool handler calls `writeMessage()` after the SQLite trans
 4. If no in-progress task found -> exit silently (agent may have completed)
 5. Writes/overwrites the `## Checkpoint` section at the bottom of the task file
 6. Appends final timestamped entry to `progress/{agentId}.md`
-7. If `knowledge/{agentId}.md` doesn't exist and agent has knowledge to flush, creates it
 
 ### Checkpoint Content
 
@@ -290,7 +291,7 @@ When the captain re-spawns an arm for the same task:
 
 - Does not change task status — task stays `in_progress` in both SQLite and filesystem
 - Does not re-assign the task — captain handles re-spawn decisions
-- Does not write knowledge files proactively — only if the arm has accumulated knowledge (Phase 4 expands this)
+- Does not flush knowledge files — knowledge writing is the arm's responsibility during its session (via `knowledge/{agentId}.md`). Knowledge promotion (Tier 1 → 2 → 3) is Phase 4 work.
 
 ### Testing
 
@@ -320,7 +321,7 @@ Scans all active missions under `~/.mycelium/missions/` and surfaces actionable 
 
 | Signal | Detection | Output |
 |--------|-----------|--------|
-| Stale arm | `progress/{agentId}.md` mtime > 5 min | `arm-3 stale (7m)` |
+| Stale arm | `progress/{agentId}.md` mtime > 5 min (if no progress file, uses `members/{agentId}.md` mtime as baseline) | `arm-3 stale (7m)` |
 | Task needs review | `tasks/*.md` with `status: needs_review` | `task 2 needs review` |
 | All tasks complete | Every `tasks/*.md` has `status: completed` | `all tasks complete` |
 
@@ -384,7 +385,7 @@ Both `agentStop` and `subagentStop` events — covers arms spawned as tmux panes
 | `checkpoint.ts` | `sessionEnd` | Task-level: checkpoint in task file, progress update |
 | `arm-cleanup.ts` | `agentStop` / `subagentStop` | Member-level: member status, audit, completion check |
 
-They are complementary — different events, different concerns. Both fire on session end but handle orthogonal state.
+They are complementary — different events, different concerns. Event ordering between `sessionEnd` and `agentStop`/`subagentStop` is runtime-dependent and not guaranteed. Both hooks are designed to be order-independent: the checkpoint hook writes to the task file (task-level concern), while arm-cleanup writes to the member file and audit log (member-level concern). Neither reads state that the other writes, so correctness holds regardless of execution order.
 
 ### Member File Update
 
@@ -535,7 +536,7 @@ All tests follow existing patterns: unit tests adjacent to source in `__tests__/
 - Extended `tools-tasks.test.ts`: verify filesystem + audit after each tool call
 - Extended `tools-team.test.ts`: verify audit entry after create_team
 
-All hook tests use `execSync("npx tsx src/hooks/...")` with `MYCELIUM_BASE_PATH` env override and temp directories, consistent with existing `context-loader.test.ts`.
+All hooks read `process.env.MYCELIUM_BASE_PATH || path.join(os.homedir(), ".mycelium")` for testability, consistent with existing hooks. All hook tests use `execSync("npx tsx src/hooks/...")` with `MYCELIUM_BASE_PATH` env override and temp directories, consistent with existing `context-loader.test.ts`.
 
 ## What Does NOT Change
 
