@@ -1,4 +1,3 @@
 node_modules/
-dist/
 *.tsbuildinfo
-.copilot-teams/
+.mycelium-worktrees/
