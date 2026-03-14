@@ -30,7 +30,12 @@ See the `team-coordinate` skill for full conventions. Key points:
 - **Messages:** Check `inbox/{your-agent-id}/` between major steps. Read files, then move to `_read/`
 - **Priority messages:** If you see `priority: true` from lead, stop and follow the directive immediately
 - **Progress:** Append timestamped entries to `progress/{your-agent-id}.md` after each meaningful step
-- **Knowledge:** Write gotchas, tips, and key decisions to `knowledge/{your-agent-id}.md` as you discover them
+- **Knowledge:** Write discoveries to `knowledge/{your-agent-id}.md` using `## Heading` sections. Include `Tags: <relevant file paths>` after each entry so the captain can filter by scope when promoting. Example:
+  ```
+  ## Stripe SDK v4 changed webhook signatures
+  Use Stripe.webhooks.constructEvent instead of raw HMAC verification.
+  Tags: src/payments/, src/webhooks/
+  ```
 - **Scope:** Stay within your task's `scope` field — a hook enforces this
 
 ## Environment

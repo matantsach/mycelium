@@ -104,8 +104,32 @@ After the human confirms merges are done:
 1. Update `~/.mycelium/missions/<mission_id>/mission.md` frontmatter: set `status: completed`
 2. Update `~/.mycelium/captain.md`: remove the mission from Active Missions, remove related items from Attention Queue
 
+### Step 5: Promote knowledge (Tier 1 → 2)
+
+After generating the retrospective, promote valuable Tier 1 knowledge entries to Tier 2:
+
+1. **Read all arm knowledge files** in `~/.mycelium/missions/<mission_id>/knowledge/`. Each `{agent_id}.md` file contains entries the arm discovered during work.
+
+2. **Evaluate each entry:** Is this knowledge valuable beyond this specific arm's task? Would other arms or future missions benefit from knowing this?
+
+3. **Promote selected entries** by writing them to `~/.mycelium/missions/<mission_id>/knowledge/_shared.md` with frontmatter:
+   ```markdown
+   ---
+   type: knowledge
+   updated_at: <timestamp>
+   ---
+
+   ## <Heading>
+
+   <Content — may be edited/consolidated from the original Tier 1 entry>
+   Tags: <file paths or topic tags for scope filtering>
+   ```
+
+4. **Check for recurring patterns.** If a Tier 2 entry matches knowledge already seen in previous missions (check `~/.mycelium/knowledge/_global.md`), promote to Tier 3:
+   - Write to `~/.mycelium/knowledge/_global.md` for universal patterns
+   - Write to `~/.mycelium/knowledge/repos/<repo-slug>.md` for repo-specific patterns
+   - Include `Source: missions <list of mission IDs>` in the entry content
+
 ### What this skill does NOT do
 
-- **Knowledge promotion** — Tier 1 → 2 → 3 knowledge flow is Phase 4
-- **Pattern extraction** — Learning from missions for future use is Phase 4
 - **Automatic merging** — The human controls git operations
