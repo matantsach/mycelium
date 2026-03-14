@@ -1,7 +1,7 @@
 {
   "name": "mycelium",
   "description": "Multi-agent coordination — missions, tasks, messaging, and persistent knowledge",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "author": {
     "name": "Matan Tsach",
     "url": "https://github.com/matantsach"
