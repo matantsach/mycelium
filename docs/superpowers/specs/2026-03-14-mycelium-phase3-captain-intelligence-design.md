@@ -318,9 +318,7 @@ Unchanged from Phase 1. Single arm, fire-and-forget, no decomposition, no review
 
 ## Testing Strategy
 
-From the parent spec:
-
-> **Phase 3**: Captain judgment tests via skill invocation patterns. Verify correct skill is selected for each task type (investigation → debugging, complex → brainstorming, routine → direct delegation).
+The parent spec suggests "captain judgment tests via skill invocation patterns." Since Phase 3 defers to the user's existing workflow tools rather than shipping captain-specific brainstorming/debugging skills (Key Decision #4), testing is adapted accordingly.
 
 Since the captain is pure prompt (no TypeScript modules), testing is focused on:
 
