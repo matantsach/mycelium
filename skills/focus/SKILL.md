@@ -1,5 +1,5 @@
 ---
-name: team-focus
+name: focus
 description: Fire-and-forget single task delegation — spawns one arm to handle a task autonomously
 ---
 
@@ -26,18 +26,17 @@ When invoked:
    - `goal`: the user's instruction
    - `config`: `{ "review_required": false, "max_arms": 1 }`
 
-2. **Create task file** — write a task file to `~/.mycelium/missions/{id}/tasks/001-focus.md` with:
-   - Frontmatter: `id: 1`, `status: pending`, `assigned_to: null`, `blocked_by: []`
+2. **Create task file + DB row** — write a task file to `~/.mycelium/missions/{id}/tasks/001-focus.md` with:
+   - Frontmatter: `id: 1`, `status: pending`, `assigned_to: null`, `blocked_by: []`, `scope: []`
    - Body: the user's instruction as the task description
+   - Also insert the task row in SQLite via the DB (the MCP server handles this internally)
 
-3. **Insert task in DB** — call `mycelium/create_task` if available, or note that the DB row was created by create_team for single-task missions
-
-4. **Spawn arm** — use the runtime adapter to spawn a teammate:
+3. **Spawn arm** — use the runtime adapter to spawn a teammate:
    - Agent ID: `arm-1`
    - Task ref: `001-focus`
    - The spawned arm will claim the task, do the work, and complete it
 
-5. **Return control** — immediately return control to the human with:
+4. **Return control** — immediately return control to the human with:
    ```
    [mycelium] Focus mode started: "<instruction>"
    Mission: {id} | Arm: arm-1

@@ -6,6 +6,8 @@ Mycelium — multi-agent coordination plugin for CLI agents (Copilot CLI, Claude
 
 **Design spec:** `docs/superpowers/specs/2026-03-13-octopus-on-mycelium-design.md`
 **Phase 1 plan:** `docs/superpowers/plans/2026-03-14-mycelium-phase1-foundation.md`
+**Phase 2 spec:** `docs/superpowers/specs/2026-03-14-mycelium-phase2-protocol-migration-design.md`
+**Phase 2 plan:** `docs/superpowers/plans/2026-03-14-mycelium-phase2-protocol-migration.md`
 
 ## Commands
 
@@ -29,7 +31,9 @@ Filesystem-first coordination. All state under `~/.mycelium/`. Markdown files wi
 
 - `frontmatter.ts` — `parseFrontmatter`/`stringifyFrontmatter` using `yaml` npm package
 - `dirs.ts` — `initBasePath`, `resolveMissionPath`, `DEFAULT_BASE_PATH`
-- `mission.ts` — `initMissionDir`, `writeMissionFile`, `readMissionFile`, `writeTaskFile`, `readTaskFile`, `writeMemberFile`, `listMissions`
+- `mission.ts` — `initMissionDir`, `writeMissionFile`, `readMissionFile`, `writeTaskFile`, `readTaskFile`, `writeMemberFile`, `listMissions`, `findTaskFile`, `updateTaskFileFrontmatter`
+- `audit.ts` — `appendAuditEntry`, `AuditEntry` interface (append-only JSONL)
+- `inbox.ts` — `writeMessage`, `readMessages`, `markRead`, `writeBroadcast`, `readBroadcasts` (filesystem-based messaging)
 
 ### MCP Server (`src/mcp-server/`)
 
@@ -37,7 +41,7 @@ Filesystem-first coordination. All state under `~/.mycelium/`. Markdown files wi
 
 **Tool modules** (`src/mcp-server/tools/`):
 - `team.ts` — `create_team` (dual-write: SQLite + filesystem)
-- `tasks.ts` — `claim_task`, `complete_task`, `approve_task`, `reject_task`
+- `tasks.ts` — `claim_task`, `complete_task`, `approve_task`, `reject_task` (all with dual-write + audit logging; `reject_task` also sends inbox message)
 
 **Database** (`db.ts`): `TeamDB` class wraps `node-sqlite3-wasm`. Critical operations use `BEGIN IMMEDIATE` transactions. Task status state machine:
 
@@ -58,13 +62,19 @@ blocked → pending (auto-unblock when dependencies complete)
 
 ### Hooks (`src/hooks/`)
 
-- `context-loader.ts` — `sessionStart`; reads `~/.mycelium/missions/`, lists active missions (simple regex parse, no yaml dep)
-- `nudge-messages.ts` — `postToolUse`; placeholder, reads unread inbox count
+All hooks use `process.env.MYCELIUM_BASE_PATH || ~/.mycelium` for testability. Hooks avoid the `yaml` package — use regex/line-by-line parsing.
+
+- `context-loader.ts` — `sessionStart`; captain mode lists active missions, arm mode loads task details + inbox + knowledge + checkpoint
+- `scope-enforcer.ts` — `preToolUse`; enforces file-scope per arm based on task's `scope` field
+- `passive-monitor.ts` — `postToolUse`; captain mode detects stale arms/needs-review/all-complete, arm mode shows unread/priority messages
+- `checkpoint.ts` — `sessionEnd`; writes checkpoint to in-progress task file for crash recovery
+- `arm-cleanup.ts` — `agentStop`/`subagentStop`; marks member finished, appends audit, notifies lead if all tasks complete
 
 ### Skills, Agents, Scripts
 
-- `skills/team-focus/SKILL.md` — Focus Mode (single-arm fire-and-forget)
-- `agents/teammate.agent.md` — arm agent prompt
+- `skills/focus/SKILL.md` — Focus Mode (single-arm fire-and-forget)
+- `skills/team-coordinate/SKILL.md` — Filesystem protocol conventions (loaded for arm sessions)
+- `agents/teammate.agent.md` — arm agent prompt (filesystem-first)
 - `scripts/spawn-teammate.sh` — git worktree + tmux spawner
 
 ## Code Conventions
@@ -89,7 +99,7 @@ Tests live in `__tests__/` directories adjacent to source.
 ## Roadmap
 
 - **Phase 1** (shipped v0.5.0): Foundation — global state, Focus Mode, context-loader hook
-- **Phase 2**: Protocol migration — full mission decomposition, messaging, captain skill
+- **Phase 2** (shipped): Protocol migration — dual-write, audit logging, inbox messaging, scope enforcement, crash recovery, passive monitoring, arm cleanup
 - **Phase 3**: Captain intelligence — judgment engine, attention management
 - **Phase 4**: Mycelium knowledge — cross-session learning, multi-runtime adapters
 
