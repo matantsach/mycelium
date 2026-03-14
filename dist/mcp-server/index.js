@@ -38742,7 +38742,7 @@ var EMPTY_COMPLETION_RESULT = {
 };
 
 // src/mcp-server/server.ts
-var import_path4 = require("path");
+var import_path7 = require("path");
 
 // src/mcp-server/db.ts
 var import_node_sqlite3_wasm = __toESM(require_node_sqlite3_wasm());
@@ -38950,7 +38950,7 @@ var TeamDB = class {
 };
 
 // src/mcp-server/tools/team.ts
-var import_path3 = require("path");
+var import_path4 = require("path");
 
 // src/protocol/dirs.ts
 var import_fs = require("fs");
@@ -38976,6 +38976,15 @@ var import_path2 = require("path");
 
 // src/protocol/frontmatter.ts
 var import_yaml = __toESM(require_dist2());
+function parseFrontmatter(content) {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) {
+    return { data: {}, body: content };
+  }
+  const data = (0, import_yaml.parse)(match[1]) ?? {};
+  const body = match[2].trim();
+  return { data, body };
+}
 function stringifyFrontmatter(data, body) {
   const yaml = (0, import_yaml.stringify)(data).trim();
   const trimmedBody = body.trim();
@@ -39020,6 +39029,32 @@ function writeMemberFile(missionPath, data) {
     "utf-8"
   );
 }
+function findTaskFile(missionPath, taskId) {
+  const tasksDir = (0, import_path2.join)(missionPath, "tasks");
+  if (!(0, import_fs2.existsSync)(tasksDir)) return void 0;
+  const prefix = String(taskId).padStart(3, "0") + "-";
+  const entries = (0, import_fs2.readdirSync)(tasksDir);
+  const match = entries.find((f) => f.startsWith(prefix) && f.endsWith(".md"));
+  return match ? (0, import_path2.join)(tasksDir, match) : void 0;
+}
+function updateTaskFileFrontmatter(filePath, updates) {
+  const { data, body } = parseFrontmatter((0, import_fs2.readFileSync)(filePath, "utf-8"));
+  const merged = { ...data, ...updates };
+  (0, import_fs2.writeFileSync)(filePath, stringifyFrontmatter(merged, body), "utf-8");
+}
+
+// src/protocol/audit.ts
+var import_fs3 = require("fs");
+var import_path3 = require("path");
+function appendAuditEntry(missionPath, entry) {
+  const clean = { ts: entry.ts, agent: entry.agent, action: entry.action };
+  if (entry.task_id !== void 0) clean.task_id = entry.task_id;
+  if (entry.detail !== void 0) clean.detail = entry.detail;
+  (0, import_fs3.appendFileSync)(
+    (0, import_path3.join)(missionPath, "audit.jsonl"),
+    JSON.stringify(clean) + "\n"
+  );
+}
 
 // src/mcp-server/tools/team.ts
 function registerTeamTools(server2, db2, basePath2) {
@@ -39035,7 +39070,7 @@ function registerTeamTools(server2, db2, basePath2) {
       try {
         const mission = db2.createMission("lead");
         initBasePath(basePath2);
-        const missionPath = (0, import_path3.join)(basePath2, "missions", mission.id);
+        const missionPath = (0, import_path4.join)(basePath2, "missions", mission.id);
         initMissionDir(missionPath);
         writeMissionFile(
           missionPath,
@@ -39055,6 +39090,7 @@ function registerTeamTools(server2, db2, basePath2) {
           status: "active",
           registered_at: mission.created_at
         });
+        appendAuditEntry(missionPath, { ts: Date.now(), agent: "lead", action: "mission_create", detail: goal });
         return {
           content: [
             { type: "text", text: JSON.stringify({ ...mission, goal }) }
@@ -39071,23 +39107,51 @@ function registerTeamTools(server2, db2, basePath2) {
   );
 }
 
+// src/mcp-server/tools/tasks.ts
+var import_path6 = require("path");
+
 // src/mcp-server/types.ts
 var agentIdSchema = external_exports.string().regex(/^[a-z0-9-]+$/).max(50);
 
+// src/protocol/inbox.ts
+var import_fs4 = require("fs");
+var import_path5 = require("path");
+function writeMessage(missionPath, to, from, body, priority, timestampOverride) {
+  const timestamp = timestampOverride ?? Date.now();
+  const filename = `${timestamp}-${from}.md`;
+  const content = stringifyFrontmatter(
+    { from, priority: priority ?? false, timestamp },
+    body
+  );
+  const inboxDir = (0, import_path5.join)(missionPath, "inbox", to);
+  (0, import_fs4.mkdirSync)(inboxDir, { recursive: true });
+  (0, import_fs4.writeFileSync)((0, import_path5.join)(inboxDir, filename), content, "utf-8");
+  return filename;
+}
+
 // src/mcp-server/tools/tasks.ts
-function registerTaskTools(server2, db2) {
+function registerTaskTools(server2, db2, basePath2) {
   server2.tool(
     "claim_task",
     "Atomically claim a pending task",
-    {
-      mission_id: external_exports.string(),
-      task_id: external_exports.number(),
-      agent_id: agentIdSchema
-    },
+    { mission_id: external_exports.string(), task_id: external_exports.number(), agent_id: agentIdSchema },
     async ({ mission_id, task_id, agent_id }) => {
       try {
         db2.getActiveMission(mission_id);
         const task = db2.claimTask(mission_id, task_id, agent_id);
+        const missionPath = (0, import_path6.join)(basePath2, "missions", mission_id);
+        try {
+          const filePath = findTaskFile(missionPath, task_id);
+          if (filePath) {
+            updateTaskFileFrontmatter(filePath, {
+              status: "in_progress",
+              assigned_to: agent_id,
+              claimed_at: task.claimed_at
+            });
+          }
+          appendAuditEntry(missionPath, { ts: Date.now(), agent: agent_id, action: "task_claim", task_id });
+        } catch {
+        }
         return { content: [{ type: "text", text: JSON.stringify(task) }] };
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -39098,21 +39162,19 @@ function registerTaskTools(server2, db2) {
   server2.tool(
     "complete_task",
     "Mark an in-progress task as completed or needs_review",
-    {
-      mission_id: external_exports.string(),
-      task_id: external_exports.number(),
-      agent_id: agentIdSchema,
-      result: external_exports.string(),
-      review_required: external_exports.boolean().optional()
-    },
-    async ({ mission_id, task_id, agent_id, review_required }) => {
+    { mission_id: external_exports.string(), task_id: external_exports.number(), agent_id: agentIdSchema, result: external_exports.string(), review_required: external_exports.boolean().optional() },
+    async ({ mission_id, task_id, agent_id, result: resultText, review_required }) => {
       try {
-        const task = db2.completeTask(
-          mission_id,
-          task_id,
-          agent_id,
-          review_required
-        );
+        const task = db2.completeTask(mission_id, task_id, agent_id, review_required);
+        const missionPath = (0, import_path6.join)(basePath2, "missions", mission_id);
+        try {
+          const filePath = findTaskFile(missionPath, task_id);
+          if (filePath) {
+            updateTaskFileFrontmatter(filePath, { status: task.status, completed_at: task.completed_at });
+          }
+          appendAuditEntry(missionPath, { ts: Date.now(), agent: agent_id, action: "task_complete", task_id, detail: resultText });
+        } catch {
+        }
         return { content: [{ type: "text", text: JSON.stringify(task) }] };
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -39123,14 +39185,19 @@ function registerTaskTools(server2, db2) {
   server2.tool(
     "approve_task",
     "Lead-only: approve a task in needs_review",
-    {
-      mission_id: external_exports.string(),
-      task_id: external_exports.number(),
-      agent_id: agentIdSchema
-    },
+    { mission_id: external_exports.string(), task_id: external_exports.number(), agent_id: agentIdSchema },
     async ({ mission_id, task_id, agent_id }) => {
       try {
         const task = db2.approveTask(mission_id, task_id, agent_id);
+        const missionPath = (0, import_path6.join)(basePath2, "missions", mission_id);
+        try {
+          const filePath = findTaskFile(missionPath, task_id);
+          if (filePath) {
+            updateTaskFileFrontmatter(filePath, { status: "completed", completed_at: task.completed_at });
+          }
+          appendAuditEntry(missionPath, { ts: Date.now(), agent: agent_id, action: "task_approve", task_id });
+        } catch {
+        }
         return { content: [{ type: "text", text: JSON.stringify(task) }] };
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -39141,15 +39208,22 @@ function registerTaskTools(server2, db2) {
   server2.tool(
     "reject_task",
     "Lead-only: reject a task and send feedback",
-    {
-      mission_id: external_exports.string(),
-      task_id: external_exports.number(),
-      agent_id: agentIdSchema,
-      feedback: external_exports.string()
-    },
+    { mission_id: external_exports.string(), task_id: external_exports.number(), agent_id: agentIdSchema, feedback: external_exports.string() },
     async ({ mission_id, task_id, agent_id, feedback }) => {
       try {
         const task = db2.rejectTask(mission_id, task_id, agent_id, feedback);
+        const missionPath = (0, import_path6.join)(basePath2, "missions", mission_id);
+        try {
+          const filePath = findTaskFile(missionPath, task_id);
+          if (filePath) {
+            updateTaskFileFrontmatter(filePath, { status: "in_progress", completed_at: null });
+          }
+          appendAuditEntry(missionPath, { ts: Date.now(), agent: agent_id, action: "task_reject", task_id, detail: feedback });
+          if (task.assigned_to) {
+            writeMessage(missionPath, task.assigned_to, agent_id, feedback);
+          }
+        } catch {
+        }
         return { content: [{ type: "text", text: JSON.stringify(task) }] };
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -39162,18 +39236,18 @@ function registerTaskTools(server2, db2) {
 // src/mcp-server/server.ts
 function createServer(basePath2) {
   const server2 = new McpServer({ name: "mycelium", version: "0.5.0" });
-  const db2 = new TeamDB((0, import_path4.join)(basePath2, "teams.db"));
+  const db2 = new TeamDB((0, import_path7.join)(basePath2, "teams.db"));
   registerTeamTools(server2, db2, basePath2);
-  registerTaskTools(server2, db2);
+  registerTaskTools(server2, db2, basePath2);
   return { server: server2, db: db2 };
 }
 
 // src/mcp-server/index.ts
-var import_fs3 = require("fs");
-var import_path5 = require("path");
+var import_fs5 = require("fs");
+var import_path8 = require("path");
 var import_os2 = require("os");
-var basePath = process.env.MYCELIUM_BASE_PATH || (0, import_path5.join)((0, import_os2.homedir)(), ".mycelium");
-(0, import_fs3.mkdirSync)(basePath, { recursive: true });
+var basePath = process.env.MYCELIUM_BASE_PATH || (0, import_path8.join)((0, import_os2.homedir)(), ".mycelium");
+(0, import_fs5.mkdirSync)(basePath, { recursive: true });
 var { server, db } = createServer(basePath);
 function shutdown() {
   try {

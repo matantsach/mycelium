@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, rmSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { createServer } from "../server.js";
 import { TeamDB } from "../db.js";
+import { parseFrontmatter } from "../../protocol/frontmatter.js";
+import { writeTaskFile, findTaskFile } from "../../protocol/mission.js";
+import { readMessages } from "../../protocol/inbox.js";
 
 describe("task tools", () => {
   let tmpDir: string;
@@ -18,18 +21,13 @@ describe("task tools", () => {
     const result = createServer(tmpDir);
     db = result.db;
     const { server } = result;
-
-    const [clientTransport, serverTransport] =
-      InMemoryTransport.createLinkedPair();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     client = new Client({ name: "test", version: "1.0.0" });
-    await Promise.all([
-      client.connect(clientTransport),
-      server.connect(serverTransport),
-    ]);
-
-    // Create a mission via DB directly (faster, avoids FS overhead)
-    const mission = db.createMission("lead");
-    missionId = mission.id;
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    // Create mission via MCP (creates both DB + filesystem)
+    const createResult = await client.callTool({ name: "create_team", arguments: { goal: "Test mission" } });
+    const missionData = JSON.parse((createResult.content as Array<{ text: string }>)[0].text);
+    missionId = missionData.id;
   });
 
   afterEach(() => {
@@ -99,6 +97,43 @@ describe("task tools", () => {
       expect(result.isError).toBe(true);
       const text = (result.content as Array<{ text: string }>)[0].text;
       expect(text).toContain("not found");
+    });
+
+    it("updates task file frontmatter on claim", async () => {
+      const missionPath = join(tmpDir, "missions", missionId);
+      db.insertTask(missionId, 1, []);
+      writeTaskFile(missionPath, { id: 1, status: "pending" }, "Task One", "Do the thing");
+
+      await client.callTool({
+        name: "claim_task",
+        arguments: { mission_id: missionId, task_id: 1, agent_id: "arm-1" },
+      });
+
+      const filePath = findTaskFile(missionPath, 1);
+      expect(filePath).toBeTruthy();
+      const { data } = parseFrontmatter(readFileSync(filePath!, "utf-8"));
+      expect(data.status).toBe("in_progress");
+      expect(data.assigned_to).toBe("arm-1");
+    });
+
+    it("appends audit entry on claim", async () => {
+      const missionPath = join(tmpDir, "missions", missionId);
+      db.insertTask(missionId, 1, []);
+      writeTaskFile(missionPath, { id: 1, status: "pending" }, "Task One", "Do the thing");
+
+      await client.callTool({
+        name: "claim_task",
+        arguments: { mission_id: missionId, task_id: 1, agent_id: "arm-1" },
+      });
+
+      const auditPath = join(missionPath, "audit.jsonl");
+      expect(existsSync(auditPath)).toBe(true);
+      const lines = readFileSync(auditPath, "utf-8").trim().split("\n");
+      const entries = lines.map((l) => JSON.parse(l));
+      const claimEntry = entries.find((e) => e.action === "task_claim");
+      expect(claimEntry).toBeTruthy();
+      expect(claimEntry.agent).toBe("arm-1");
+      expect(claimEntry.task_id).toBe(1);
     });
   });
 
@@ -177,6 +212,36 @@ describe("task tools", () => {
       const task2 = db.getTask(missionId, 2);
       expect(task2!.status).toBe("pending"); // auto-unblocked
     });
+
+    it("updates task file frontmatter and appends audit on complete", async () => {
+      const missionPath = join(tmpDir, "missions", missionId);
+      db.insertTask(missionId, 1, []);
+      db.claimTask(missionId, 1, "arm-1");
+      writeTaskFile(missionPath, { id: 1, status: "in_progress" }, "Task One", "Do the thing");
+
+      await client.callTool({
+        name: "complete_task",
+        arguments: {
+          mission_id: missionId,
+          task_id: 1,
+          agent_id: "arm-1",
+          result: "All done",
+        },
+      });
+
+      const filePath = findTaskFile(missionPath, 1);
+      expect(filePath).toBeTruthy();
+      const { data } = parseFrontmatter(readFileSync(filePath!, "utf-8"));
+      expect(data.status).toBe("completed");
+
+      const auditPath = join(missionPath, "audit.jsonl");
+      const lines = readFileSync(auditPath, "utf-8").trim().split("\n");
+      const entries = lines.map((l) => JSON.parse(l));
+      const completeEntry = entries.find((e) => e.action === "task_complete");
+      expect(completeEntry).toBeTruthy();
+      expect(completeEntry.agent).toBe("arm-1");
+      expect(completeEntry.detail).toBe("All done");
+    });
   });
 
   describe("approve_task", () => {
@@ -219,6 +284,32 @@ describe("task tools", () => {
         arguments: { mission_id: missionId, task_id: 1, agent_id: "lead" },
       });
       expect(result.isError).toBe(true);
+    });
+
+    it("updates task file frontmatter and appends audit on approve", async () => {
+      const missionPath = join(tmpDir, "missions", missionId);
+      db.insertTask(missionId, 1, []);
+      db.claimTask(missionId, 1, "arm-1");
+      db.completeTask(missionId, 1, "arm-1", true);
+      writeTaskFile(missionPath, { id: 1, status: "needs_review" }, "Task One", "Do the thing");
+
+      await client.callTool({
+        name: "approve_task",
+        arguments: { mission_id: missionId, task_id: 1, agent_id: "lead" },
+      });
+
+      const filePath = findTaskFile(missionPath, 1);
+      expect(filePath).toBeTruthy();
+      const { data } = parseFrontmatter(readFileSync(filePath!, "utf-8"));
+      expect(data.status).toBe("completed");
+
+      const auditPath = join(missionPath, "audit.jsonl");
+      const lines = readFileSync(auditPath, "utf-8").trim().split("\n");
+      const entries = lines.map((l) => JSON.parse(l));
+      const approveEntry = entries.find((e) => e.action === "task_approve");
+      expect(approveEntry).toBeTruthy();
+      expect(approveEntry.agent).toBe("lead");
+      expect(approveEntry.task_id).toBe(1);
     });
   });
 
@@ -276,6 +367,67 @@ describe("task tools", () => {
         },
       });
       expect(result.isError).toBe(true);
+    });
+
+    it("updates task file frontmatter and appends audit on reject", async () => {
+      const missionPath = join(tmpDir, "missions", missionId);
+      db.insertTask(missionId, 1, []);
+      db.claimTask(missionId, 1, "arm-1");
+      db.completeTask(missionId, 1, "arm-1", true);
+      writeTaskFile(missionPath, { id: 1, status: "needs_review" }, "Task One", "Do the thing");
+
+      await client.callTool({
+        name: "reject_task",
+        arguments: {
+          mission_id: missionId,
+          task_id: 1,
+          agent_id: "lead",
+          feedback: "Not good enough",
+        },
+      });
+
+      const filePath = findTaskFile(missionPath, 1);
+      expect(filePath).toBeTruthy();
+      const { data } = parseFrontmatter(readFileSync(filePath!, "utf-8"));
+      expect(data.status).toBe("in_progress");
+
+      const auditPath = join(missionPath, "audit.jsonl");
+      const lines = readFileSync(auditPath, "utf-8").trim().split("\n");
+      const entries = lines.map((l) => JSON.parse(l));
+      const rejectEntry = entries.find((e) => e.action === "task_reject");
+      expect(rejectEntry).toBeTruthy();
+      expect(rejectEntry.agent).toBe("lead");
+      expect(rejectEntry.detail).toBe("Not good enough");
+    });
+
+    it("sends feedback message to assigned arm's inbox", async () => {
+      db.insertTask(missionId, 1, []);
+      const missionPath = join(tmpDir, "missions", missionId);
+      writeTaskFile(
+        missionPath,
+        { id: 1, status: "pending", assigned_to: null, blocked_by: [], scope: [], prior_tasks: [], created_at: Date.now(), claimed_at: null, completed_at: null },
+        "Reject inbox test",
+        "Test"
+      );
+      mkdirSync(join(missionPath, "inbox", "arm-1"), { recursive: true });
+
+      db.claimTask(missionId, 1, "arm-1");
+      db.completeTask(missionId, 1, "arm-1", true);
+
+      await client.callTool({
+        name: "reject_task",
+        arguments: {
+          mission_id: missionId,
+          task_id: 1,
+          agent_id: "lead",
+          feedback: "Needs more tests",
+        },
+      });
+
+      const messages = readMessages(missionPath, "arm-1");
+      expect(messages).toHaveLength(1);
+      expect(messages[0].body).toContain("Needs more tests");
+      expect(messages[0].from).toBe("lead");
     });
   });
 });

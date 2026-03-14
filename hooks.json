@@ -1,14 +1,10 @@
 {
   "hooks": [
-    {
-      "event": "sessionStart",
-      "command": "node dist/hooks/context-loader.js",
-      "timeout": 5000
-    },
-    {
-      "event": "postToolUse",
-      "command": "node dist/hooks/nudge-messages.js",
-      "timeout": 3000
-    }
+    { "event": "sessionStart", "command": "node dist/hooks/context-loader.js", "timeout": 5000 },
+    { "event": "preToolUse", "command": "node dist/hooks/scope-enforcer.js", "timeout": 3000 },
+    { "event": "postToolUse", "command": "node dist/hooks/passive-monitor.js", "timeout": 3000 },
+    { "event": "sessionEnd", "command": "node dist/hooks/checkpoint.js", "timeout": 5000 },
+    { "event": "agentStop", "command": "node dist/hooks/arm-cleanup.js", "timeout": 5000 },
+    { "event": "subagentStop", "command": "node dist/hooks/arm-cleanup.js", "timeout": 5000 }
   ]
 }

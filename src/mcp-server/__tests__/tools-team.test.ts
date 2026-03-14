@@ -99,4 +99,22 @@ describe("team tools", () => {
     expect(leadFile.data.role).toBe("lead");
     expect(leadFile.data.status).toBe("active");
   });
+
+  it("create_team appends audit entry", async () => {
+    const result = await client.callTool({
+      name: "create_team",
+      arguments: { goal: "Audit test mission" },
+    });
+    const data = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+    const missionPath = join(tmpDir, "missions", data.id);
+    const auditPath = join(missionPath, "audit.jsonl");
+
+    expect(existsSync(auditPath)).toBe(true);
+    const lines = readFileSync(auditPath, "utf-8").trim().split("\n");
+    const entries = lines.map((l: string) => JSON.parse(l));
+    const createEntry = entries.find((e: { action: string }) => e.action === "mission_create");
+    expect(createEntry).toBeTruthy();
+    expect(createEntry.agent).toBe("lead");
+    expect(createEntry.detail).toBe("Audit test mission");
+  });
 });

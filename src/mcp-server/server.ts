@@ -10,6 +10,6 @@ export function createServer(
   const server = new McpServer({ name: "mycelium", version: "0.5.0" });
   const db = new TeamDB(join(basePath, "teams.db"));
   registerTeamTools(server, db, basePath);
-  registerTaskTools(server, db);
+  registerTaskTools(server, db, basePath);
   return { server, db };
 }

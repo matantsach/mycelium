@@ -80,6 +80,28 @@ export function writeMemberFile(
   );
 }
 
+export function findTaskFile(
+  missionPath: string,
+  taskId: number
+): string | undefined {
+  const tasksDir = join(missionPath, "tasks");
+  if (!existsSync(tasksDir)) return undefined;
+
+  const prefix = String(taskId).padStart(3, "0") + "-";
+  const entries = readdirSync(tasksDir);
+  const match = entries.find((f) => f.startsWith(prefix) && f.endsWith(".md"));
+  return match ? join(tasksDir, match) : undefined;
+}
+
+export function updateTaskFileFrontmatter(
+  filePath: string,
+  updates: Record<string, unknown>
+): void {
+  const { data, body } = parseFrontmatter(readFileSync(filePath, "utf-8"));
+  const merged = { ...data, ...updates };
+  writeFileSync(filePath, stringifyFrontmatter(merged, body), "utf-8");
+}
+
 export function listMissions(basePath: string): FrontmatterResult[] {
   const missionsDir = join(basePath, "missions");
   if (!existsSync(missionsDir)) return [];
