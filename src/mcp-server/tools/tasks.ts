@@ -3,7 +3,7 @@ import { z } from "zod";
 import { join } from "path";
 import type { TeamDB } from "../db.js";
 import { agentIdSchema } from "../types.js";
-import { findTaskFile, updateTaskFileFrontmatter } from "../../protocol/mission.js";
+import { findTaskFile, updateTaskFileFrontmatter, readTaskFile } from "../../protocol/mission.js";
 import { appendAuditEntry } from "../../protocol/audit.js";
 import { writeMessage } from "../../protocol/inbox.js";
 
@@ -15,8 +15,19 @@ export function registerTaskTools(server: McpServer, db: TeamDB, basePath: strin
     async ({ mission_id, task_id, agent_id }) => {
       try {
         db.getActiveMission(mission_id);
-        const task = db.claimTask(mission_id, task_id, agent_id);
         const missionPath = join(basePath, "missions", mission_id);
+
+        let fsData: { blockedBy: number[] } | undefined;
+        if (!db.getTask(mission_id, task_id)) {
+          const filePath = findTaskFile(missionPath, task_id);
+          if (!filePath) {
+            return { content: [{ type: "text" as const, text: `Task ${task_id} not found in mission ${mission_id}` }], isError: true };
+          }
+          const { data } = readTaskFile(filePath);
+          fsData = { blockedBy: Array.isArray(data.blocked_by) ? data.blocked_by : [] };
+        }
+
+        const task = db.reconcileAndClaimTask(mission_id, task_id, agent_id, fsData);
         try {
           const filePath = findTaskFile(missionPath, task_id);
           if (filePath) {
@@ -26,10 +37,10 @@ export function registerTaskTools(server: McpServer, db: TeamDB, basePath: strin
           }
           appendAuditEntry(missionPath, { ts: Date.now(), agent: agent_id, action: "task_claim", task_id });
         } catch { /* Filesystem write failure is non-fatal */ }
-        return { content: [{ type: "text", text: JSON.stringify(task) }] };
+        return { content: [{ type: "text" as const, text: JSON.stringify(task) }] };
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
-        return { content: [{ type: "text", text: message }], isError: true };
+        return { content: [{ type: "text" as const, text: message }], isError: true };
       }
     }
   );

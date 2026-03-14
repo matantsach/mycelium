@@ -119,6 +119,49 @@ export class TeamDB {
     }
   }
 
+  reconcileAndClaimTask(
+    missionId: string,
+    taskId: number,
+    agentId: string,
+    fsData?: { blockedBy: number[] }
+  ): Task {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      let task = this.getTask(missionId, taskId);
+      if (!task && fsData) {
+        this.insertTask(missionId, taskId, fsData.blockedBy);
+        for (const blockerId of fsData.blockedBy) {
+          if (!this.getTask(missionId, blockerId)) {
+            this.insertTask(missionId, blockerId, []);
+          }
+        }
+        task = this.getTask(missionId, taskId);
+      }
+      if (!task) throw new Error(`Task ${taskId} not found in mission ${missionId}`);
+      if (task.status !== "pending") throw new Error(`Task ${taskId} is ${task.status}, cannot claim`);
+
+      if (task.blocked_by.length > 0) {
+        for (const bid of task.blocked_by) {
+          const blocker = this.getTask(missionId, bid);
+          if (blocker && blocker.status !== "completed") {
+            throw new Error(`Task ${taskId} is blocked by task ${bid}`);
+          }
+        }
+      }
+
+      const now = Date.now();
+      this.db.run(
+        "UPDATE tasks SET status = 'in_progress', assigned_to = ?, claimed_at = ? WHERE mission_id = ? AND task_id = ?",
+        [agentId, now, missionId, taskId]
+      );
+      this.db.exec("COMMIT");
+      return this.getTask(missionId, taskId)!;
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
+
   completeTask(missionId: string, taskId: number, agentId: string, reviewRequired?: boolean): Task {
     this.db.exec("BEGIN IMMEDIATE");
     try {

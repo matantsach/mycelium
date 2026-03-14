@@ -38850,6 +38850,41 @@ var TeamDB = class {
       throw e;
     }
   }
+  reconcileAndClaimTask(missionId, taskId, agentId, fsData) {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      let task = this.getTask(missionId, taskId);
+      if (!task && fsData) {
+        this.insertTask(missionId, taskId, fsData.blockedBy);
+        for (const blockerId of fsData.blockedBy) {
+          if (!this.getTask(missionId, blockerId)) {
+            this.insertTask(missionId, blockerId, []);
+          }
+        }
+        task = this.getTask(missionId, taskId);
+      }
+      if (!task) throw new Error(`Task ${taskId} not found in mission ${missionId}`);
+      if (task.status !== "pending") throw new Error(`Task ${taskId} is ${task.status}, cannot claim`);
+      if (task.blocked_by.length > 0) {
+        for (const bid of task.blocked_by) {
+          const blocker = this.getTask(missionId, bid);
+          if (blocker && blocker.status !== "completed") {
+            throw new Error(`Task ${taskId} is blocked by task ${bid}`);
+          }
+        }
+      }
+      const now = Date.now();
+      this.db.run(
+        "UPDATE tasks SET status = 'in_progress', assigned_to = ?, claimed_at = ? WHERE mission_id = ? AND task_id = ?",
+        [agentId, now, missionId, taskId]
+      );
+      this.db.exec("COMMIT");
+      return this.getTask(missionId, taskId);
+    } catch (e) {
+      this.db.exec("ROLLBACK");
+      throw e;
+    }
+  }
   completeTask(missionId, taskId, agentId, reviewRequired) {
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -39020,6 +39055,9 @@ function writeMissionFile(missionPath, data, goal) {
   const content = stringifyFrontmatter(data, `# ${goal}`);
   (0, import_fs2.writeFileSync)((0, import_path2.join)(missionPath, "mission.md"), content, "utf-8");
 }
+function readTaskFile(filePath) {
+  return parseFrontmatter((0, import_fs2.readFileSync)(filePath, "utf-8"));
+}
 function writeMemberFile(missionPath, data) {
   const agentId = data.agent_id;
   const content = stringifyFrontmatter(data, "");
@@ -39138,8 +39176,17 @@ function registerTaskTools(server2, db2, basePath2) {
     async ({ mission_id, task_id, agent_id }) => {
       try {
         db2.getActiveMission(mission_id);
-        const task = db2.claimTask(mission_id, task_id, agent_id);
         const missionPath = (0, import_path6.join)(basePath2, "missions", mission_id);
+        let fsData;
+        if (!db2.getTask(mission_id, task_id)) {
+          const filePath = findTaskFile(missionPath, task_id);
+          if (!filePath) {
+            return { content: [{ type: "text", text: `Task ${task_id} not found in mission ${mission_id}` }], isError: true };
+          }
+          const { data } = readTaskFile(filePath);
+          fsData = { blockedBy: Array.isArray(data.blocked_by) ? data.blocked_by : [] };
+        }
+        const task = db2.reconcileAndClaimTask(mission_id, task_id, agent_id, fsData);
         try {
           const filePath = findTaskFile(missionPath, task_id);
           if (filePath) {
