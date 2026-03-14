@@ -8,6 +8,7 @@ import {
   writeMissionFile,
   writeMemberFile,
 } from "../../protocol/mission.js";
+import { appendAuditEntry } from "../../protocol/audit.js";
 
 export function registerTeamTools(
   server: McpServer,
@@ -48,6 +49,7 @@ export function registerTeamTools(
           status: "active",
           registered_at: mission.created_at,
         });
+        appendAuditEntry(missionPath, { ts: Date.now(), agent: "lead", action: "mission_create", detail: goal });
 
         return {
           content: [
