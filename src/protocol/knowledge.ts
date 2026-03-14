@@ -3,6 +3,7 @@ import {
   readFileSync,
   writeFileSync,
   mkdirSync,
+  readdirSync,
 } from "fs";
 import { join, dirname } from "path";
 import { parseFrontmatter, stringifyFrontmatter } from "./frontmatter.js";
@@ -63,7 +64,50 @@ export function writeKnowledgeEntry(filePath: string, entry: KnowledgeEntry): vo
   }
 }
 
-// Stub for Task 2 — not yet implemented
-export function readKnowledgeEntries(_filePath: string): KnowledgeEntry[] {
-  return [];
+export function readKnowledgeEntries(filePath: string): KnowledgeEntry[] {
+  if (!existsSync(filePath)) return [];
+
+  const raw = readFileSync(filePath, "utf-8");
+  const { body } = parseFrontmatter(raw);
+  if (!body.trim()) return [];
+
+  const sections = body.split(/^## /m).filter((s) => s.trim());
+  return sections.map((section) => {
+    const lines = section.split("\n");
+    const heading = lines[0].trim();
+    const rest = lines.slice(1).join("\n");
+
+    const tagMatch = rest.match(/^Tags:\s*(.+)$/m);
+    const tags = tagMatch ? tagMatch[1].split(",").map((t) => t.trim()) : undefined;
+    const content = rest
+      .replace(/^Tags:\s*.+$/m, "")
+      .trim();
+
+    return { heading, content, ...(tags ? { tags } : {}) };
+  });
+}
+
+export function collectTier1Entries(missionPath: string): KnowledgeEntry[] {
+  const knowledgeDir = join(missionPath, "knowledge");
+  if (!existsSync(knowledgeDir)) return [];
+
+  const files = readdirSync(knowledgeDir).filter(
+    (f) => f.endsWith(".md") && f !== "_shared.md"
+  );
+
+  const entries: KnowledgeEntry[] = [];
+  for (const file of files) {
+    entries.push(...readKnowledgeEntries(join(knowledgeDir, file)));
+  }
+  return entries;
+}
+
+export function promoteKnowledge(
+  missionPath: string,
+  entries: KnowledgeEntry[]
+): void {
+  const sharedPath = join(missionPath, "knowledge", "_shared.md");
+  for (const entry of entries) {
+    writeKnowledgeEntry(sharedPath, entry);
+  }
 }
