@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/matantsach/mycelium/compare/mycelium-v0.6.0...mycelium-v0.7.0) (2026-03-14)
+
+
+### Features
+
+* Phase 3 — Captain Intelligence ([#6](https://github.com/matantsach/mycelium/issues/6)) ([f6473a8](https://github.com/matantsach/mycelium/commit/f6473a8186a74d9ac1fa79945b28a3625d5478e8))
+
 ## [0.6.0](https://github.com/matantsach/mycelium/compare/mycelium-v0.5.0...mycelium-v0.6.0) (2026-03-14)
 
 
