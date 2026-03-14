@@ -8,6 +8,7 @@ Mycelium — multi-agent coordination plugin for CLI agents (Copilot CLI, Claude
 **Phase 1 plan:** `docs/superpowers/plans/2026-03-14-mycelium-phase1-foundation.md`
 **Phase 2 spec:** `docs/superpowers/specs/2026-03-14-mycelium-phase2-protocol-migration-design.md`
 **Phase 2 plan:** `docs/superpowers/plans/2026-03-14-mycelium-phase2-protocol-migration.md`
+**Phase 4 plan:** `docs/superpowers/plans/2026-03-14-mycelium-phase4-knowledge-adapters.md`
 
 ## Commands
 
@@ -34,6 +35,8 @@ Filesystem-first coordination. All state under `~/.mycelium/`. Markdown files wi
 - `mission.ts` — `initMissionDir`, `writeMissionFile`, `readMissionFile`, `writeTaskFile`, `readTaskFile`, `writeMemberFile`, `listMissions`, `findTaskFile`, `updateTaskFileFrontmatter`
 - `audit.ts` — `appendAuditEntry`, `AuditEntry` interface (append-only JSONL)
 - `inbox.ts` — `writeMessage`, `readMessages`, `markRead`, `writeBroadcast`, `readBroadcasts` (filesystem-based messaging)
+- `knowledge.ts` — `writeKnowledgeEntry`, `readKnowledgeEntries`, `knowledgePath`, `collectTier1Entries`, `promoteKnowledge`, `promoteToGlobal`, `promoteToRepo`, `loadRelevantKnowledge`
+- `templates.ts` — `writeTemplate`, `readTemplate`, `listTemplates`, `instantiateTemplate`
 
 ### MCP Server (`src/mcp-server/`)
 
@@ -58,13 +61,15 @@ blocked → pending (auto-unblock when dependencies complete)
 
 - `types.ts` — `RuntimeAdapter` + `SpawnConfig` interfaces
 - `copilot-cli.ts` — Copilot CLI adapter (wraps `spawn-teammate.sh`)
-- `registry.ts` — `getAdapter(name, projectRoot)` factory
+- `claude-code.ts` — Claude Code adapter (wraps `spawn-teammate-claude.sh`)
+- `codex-cli.ts` — Codex CLI adapter (wraps `spawn-teammate-codex.sh`)
+- `registry.ts` — `getAdapter(name, projectRoot)` factory (supports copilot-cli, claude-code, codex-cli)
 
 ### Hooks (`src/hooks/`)
 
 All hooks use `process.env.MYCELIUM_BASE_PATH || ~/.mycelium` for testability. Hooks avoid the `yaml` package — use regex/line-by-line parsing.
 
-- `context-loader.ts` — `sessionStart`; captain mode lists active missions + loads `captain.md` attention queue, arm mode loads task details + inbox + knowledge + checkpoint
+- `context-loader.ts` — `sessionStart`; captain mode lists active missions + loads `captain.md` attention queue, arm mode loads task details + inbox + knowledge + checkpoint; loads Tier 3 global + repo knowledge for all sessions
 - `scope-enforcer.ts` — `preToolUse`; enforces file-scope per arm based on task's `scope` field
 - `passive-monitor.ts` — `postToolUse`; captain mode detects stale arms/needs-review/all-complete, arm mode shows unread/priority messages
 - `checkpoint.ts` — `sessionEnd`; writes checkpoint to in-progress task file for crash recovery
@@ -77,7 +82,9 @@ All hooks use `process.env.MYCELIUM_BASE_PATH || ~/.mycelium` for testability. H
 - `skills/team-review/SKILL.md` — Mission retrospective and merge workflow
 - `skills/team-coordinate/SKILL.md` — Filesystem protocol conventions (loaded for arm sessions)
 - `agents/teammate.agent.md` — arm agent prompt (filesystem-first)
-- `scripts/spawn-teammate.sh` — git worktree + tmux spawner
+- `scripts/spawn-teammate.sh` — git worktree + tmux spawner (Copilot CLI)
+- `scripts/spawn-teammate-claude.sh` — git worktree + tmux spawner (Claude Code)
+- `scripts/spawn-teammate-codex.sh` — git worktree + tmux spawner (Codex CLI)
 
 ## Code Conventions
 
@@ -104,7 +111,7 @@ Tests live in `__tests__/` directories adjacent to source.
 - **Phase 1** (shipped v0.5.0): Foundation — global state, Focus Mode, context-loader hook
 - **Phase 2** (shipped): Protocol migration — dual-write, audit logging, inbox messaging, scope enforcement, crash recovery, passive monitoring, arm cleanup
 - **Phase 3** (shipped): Captain intelligence — captain skill, team-review skill, claim_task reconciliation, captain.md lifecycle
-- **Phase 4**: Mycelium knowledge — cross-session learning, multi-runtime adapters
+- **Phase 4** (shipped): Mycelium knowledge — 3-tier knowledge promotion, enhanced context loading, Claude Code + Codex CLI adapters, mission templates
 
 ## Adding a New MCP Tool
 

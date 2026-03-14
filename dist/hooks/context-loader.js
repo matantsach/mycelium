@@ -100,6 +100,27 @@ if (agentId && missionId) {
       if (bodyMatch && bodyMatch[1].trim()) console.log(bodyMatch[1].trim());
     }
   }
+  const missionContent = (0, import_fs.readFileSync)((0, import_path.join)(mPath, "mission.md"), "utf-8");
+  const repoField = parseFmField(missionContent, "repo");
+  if (repoField) {
+    const repoSlug = repoField.replace(/^\//, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+    const lastSegment = repoField.split("/").filter(Boolean).pop();
+    const candidates = [
+      (0, import_path.join)(basePath, "knowledge", "repos", `${repoSlug}.md`),
+      ...lastSegment ? [(0, import_path.join)(basePath, "knowledge", "repos", `${lastSegment}.md`)] : []
+    ];
+    for (const candidate of candidates) {
+      if ((0, import_fs.existsSync)(candidate)) {
+        const content = (0, import_fs.readFileSync)(candidate, "utf-8");
+        const bodyMatch = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
+        if (bodyMatch && bodyMatch[1].trim()) {
+          console.log("\n--- Repo Knowledge ---");
+          console.log(bodyMatch[1].trim());
+        }
+        break;
+      }
+    }
+  }
 } else {
   if (!(0, import_fs.existsSync)(missionsDir)) process.exit(0);
   const entries = (0, import_fs.readdirSync)(missionsDir, { withFileTypes: true });
@@ -134,5 +155,14 @@ if (agentId && missionId) {
       console.log("\n--- Captain State ---");
       console.log(bodyMatch[1].trim());
     }
+  }
+}
+var globalKnowledgePath = (0, import_path.join)(basePath, "knowledge", "_global.md");
+if ((0, import_fs.existsSync)(globalKnowledgePath)) {
+  const content = (0, import_fs.readFileSync)(globalKnowledgePath, "utf-8");
+  const bodyMatch = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
+  if (bodyMatch && bodyMatch[1].trim()) {
+    console.log("\n--- Global Knowledge ---");
+    console.log(bodyMatch[1].trim());
   }
 }
