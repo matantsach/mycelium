@@ -18,7 +18,7 @@ import {
 import { stringifyFrontmatter } from "../../protocol/frontmatter.js";
 
 const HOOK = "src/hooks/passive-monitor.ts";
-const CWD = "/Users/matantsach/mtsach/projects/mycelium/.worktrees/phase2";
+const CWD = process.cwd();
 
 function runHook(
   tmpBase: string,

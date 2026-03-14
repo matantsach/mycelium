@@ -29,7 +29,7 @@ describe("context-loader hook", () => {
 
     const output = execSync(`npx tsx src/hooks/context-loader.ts`, {
       encoding: "utf-8",
-      cwd: "/Users/matantsach/mtsach/projects/mycelium/.worktrees/phase2",
+      cwd: process.cwd(),
       env: { ...process.env, MYCELIUM_BASE_PATH: tmpBase },
     });
     expect(output).toContain("m1");
@@ -47,7 +47,7 @@ describe("context-loader hook", () => {
 
     const output = execSync(`npx tsx src/hooks/context-loader.ts`, {
       encoding: "utf-8",
-      cwd: "/Users/matantsach/mtsach/projects/mycelium/.worktrees/phase2",
+      cwd: process.cwd(),
       env: { ...process.env, MYCELIUM_BASE_PATH: tmpBase },
     });
     expect(output.trim()).toBe("");
@@ -56,7 +56,7 @@ describe("context-loader hook", () => {
   it("is silent when no missions exist", () => {
     const output = execSync(`npx tsx src/hooks/context-loader.ts`, {
       encoding: "utf-8",
-      cwd: "/Users/matantsach/mtsach/projects/mycelium/.worktrees/phase2",
+      cwd: process.cwd(),
       env: { ...process.env, MYCELIUM_BASE_PATH: tmpBase },
     });
     expect(output.trim()).toBe("");
@@ -78,7 +78,7 @@ describe("arm session context loading", () => {
   function runHook(extraEnv: Record<string, string> = {}): string {
     return execSync(`npx tsx src/hooks/context-loader.ts`, {
       encoding: "utf-8",
-      cwd: "/Users/matantsach/mtsach/projects/mycelium/.worktrees/phase2",
+      cwd: process.cwd(),
       env: {
         ...process.env,
         MYCELIUM_BASE_PATH: tmpBase,

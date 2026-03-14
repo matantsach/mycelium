@@ -6,7 +6,7 @@ import { tmpdir } from "os";
 import { initMissionDir } from "../../protocol/mission.js";
 import { stringifyFrontmatter } from "../../protocol/frontmatter.js";
 
-const CWD = "/Users/matantsach/mtsach/projects/mycelium/.worktrees/phase2";
+const CWD = process.cwd();
 
 function runHook(tmpBase: string, env: Record<string, string>): void {
   execSync(`npx tsx src/hooks/arm-cleanup.ts`, {
