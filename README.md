@@ -96,10 +96,10 @@ npm run test:watch    # watch mode
 
 ## Roadmap
 
-- **Phase 1** (current): Foundation — global state, Focus Mode, context-loader hook
-- **Phase 2**: Protocol migration — full mission decomposition, messaging
-- **Phase 3**: Captain intelligence — judgment engine, attention management
-- **Phase 4**: Mycelium knowledge — cross-session learning, multi-runtime adapters
+- **Phase 1** (shipped): Foundation — global state, Focus Mode, context-loader hook
+- **Phase 2** (shipped): Protocol migration — full mission decomposition, messaging
+- **Phase 3** (shipped): Captain intelligence — judgment engine, attention management
+- **Phase 4** (shipped): Mycelium knowledge — 3-tier knowledge promotion, enhanced context loading, Claude Code + Codex CLI adapters, mission templates
 
 ## Contributing
 

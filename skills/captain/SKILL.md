@@ -28,6 +28,13 @@ Use this judgment table to decide how to handle the user's request:
 
 When you decompose work into a task DAG:
 
+0. **Load knowledge.** Before decomposing, read available Tier 2 and Tier 3 knowledge:
+   - `~/.mycelium/knowledge/_global.md` — Global patterns from previous missions
+   - `~/.mycelium/knowledge/repos/<repo-slug>.md` — Repo-specific learnings
+   - If resuming/extending a mission: `~/.mycelium/missions/<id>/knowledge/_shared.md`
+
+   Use knowledge entries to inform decomposition: known gotchas → add context to relevant tasks, known patterns → better scope definitions, known file conventions → more accurate task descriptions.
+
 1. **Identify distinct units of work.** Each task should be independently completable by one arm.
 
 2. **Define scope per task.** List specific file paths and globs each arm is allowed to touch.
@@ -157,6 +164,11 @@ The `postToolUse` passive-monitor hook surfaces signals in your session output. 
 - **`[octopus] mission-X: all tasks complete`** — Invoke @team-review to generate retrospective and guide merges.
 
 - **`[octopus] N unread message in inbox`** — Read messages from `~/.mycelium/missions/<mission_id>/inbox/lead/`. Apply question resolution.
+
+- **Knowledge promotion (Tier 2→3):** When completing a mission via @team-review, review the Tier 2 `_shared.md` entries. If a pattern has appeared across 2+ missions, promote it to Tier 3:
+  - Universal patterns → `~/.mycelium/knowledge/_global.md`
+  - Repo-specific patterns → `~/.mycelium/knowledge/repos/<repo-slug>.md`
+  - Include `Source: missions <list>` for traceability
 
 ## Question Resolution
 
