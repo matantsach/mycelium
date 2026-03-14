@@ -10,6 +10,8 @@ import {
   readTaskFile,
   writeMemberFile,
   listMissions,
+  findTaskFile,
+  updateTaskFileFrontmatter,
 } from "../mission.js";
 
 describe("mission files", () => {
@@ -152,6 +154,67 @@ describe("mission files", () => {
     it("returns empty array when no missions exist", () => {
       mkdirSync(join(tmpBase, "missions"), { recursive: true });
       expect(listMissions(tmpBase)).toEqual([]);
+    });
+  });
+
+  describe("findTaskFile", () => {
+    it("finds task file by ID with zero-padded prefix", () => {
+      initMissionDir(missionPath);
+      writeTaskFile(
+        missionPath,
+        { id: 1, status: "pending", assigned_to: null, blocked_by: [], prior_tasks: [], scope: [], created_at: Date.now(), claimed_at: null, completed_at: null },
+        "Test task",
+        "Do the thing"
+      );
+
+      const found = findTaskFile(missionPath, 1);
+      expect(found).toBeDefined();
+      expect(found!).toContain("001-test-task.md");
+    });
+
+    it("returns undefined for non-existent task", () => {
+      initMissionDir(missionPath);
+      const found = findTaskFile(missionPath, 99);
+      expect(found).toBeUndefined();
+    });
+  });
+
+  describe("updateTaskFileFrontmatter", () => {
+    it("merges updates into existing frontmatter", () => {
+      initMissionDir(missionPath);
+      writeTaskFile(
+        missionPath,
+        { id: 1, status: "pending", assigned_to: null, blocked_by: [], prior_tasks: [], scope: [], created_at: 1000, claimed_at: null, completed_at: null },
+        "Update test",
+        "Some description"
+      );
+
+      const filePath = findTaskFile(missionPath, 1)!;
+      updateTaskFileFrontmatter(filePath, { status: "in_progress", assigned_to: "arm-1", claimed_at: 2000 });
+
+      const updated = readTaskFile(filePath);
+      expect(updated.data.status).toBe("in_progress");
+      expect(updated.data.assigned_to).toBe("arm-1");
+      expect(updated.data.claimed_at).toBe(2000);
+      expect(updated.data.id).toBe(1);
+      expect(updated.data.created_at).toBe(1000);
+    });
+
+    it("preserves body content when updating frontmatter", () => {
+      initMissionDir(missionPath);
+      writeTaskFile(
+        missionPath,
+        { id: 1, status: "pending", assigned_to: null, blocked_by: [], prior_tasks: [], scope: [], created_at: 1000, claimed_at: null, completed_at: null },
+        "Body test",
+        "Important description"
+      );
+
+      const filePath = findTaskFile(missionPath, 1)!;
+      updateTaskFileFrontmatter(filePath, { status: "completed" });
+
+      const updated = readTaskFile(filePath);
+      expect(updated.body).toContain("Body test");
+      expect(updated.body).toContain("Important description");
     });
   });
 });
