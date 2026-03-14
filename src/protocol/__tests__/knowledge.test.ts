@@ -40,6 +40,19 @@ describe("knowledge protocol", () => {
       const p = knowledgePath(tmpDir, { tier: 3, repo: "/Users/dev/my-project" });
       expect(p).toBe(join(tmpDir, "knowledge", "repos", "users-dev-my-project.md"));
     });
+
+    it("throws for Tier 1 without missionId or agentId", () => {
+      expect(() => knowledgePath(tmpDir, { tier: 1 })).toThrow("Tier 1 requires");
+    });
+
+    it("throws for Tier 2 without missionId", () => {
+      expect(() => knowledgePath(tmpDir, { tier: 2 })).toThrow("Tier 2 requires");
+    });
+
+    it("strips trailing slash from repo path", () => {
+      const p = knowledgePath(tmpDir, { tier: 3, repo: "/my/repo/" });
+      expect(p).toBe(join(tmpDir, "knowledge", "repos", "my-repo.md"));
+    });
   });
 
   describe("writeKnowledgeEntry", () => {

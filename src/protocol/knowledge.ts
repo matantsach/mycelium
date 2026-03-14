@@ -24,6 +24,7 @@ function slugifyRepo(repo: string): string {
   return repo
     .replace(/^\//, "")
     .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-|-$/g, "")
     .toLowerCase();
 }
 
