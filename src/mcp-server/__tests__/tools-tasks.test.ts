@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { createServer } from "../server.js";
 import { TeamDB } from "../db.js";
 import { parseFrontmatter } from "../../protocol/frontmatter.js";
 import { writeTaskFile, findTaskFile } from "../../protocol/mission.js";
+import { readMessages } from "../../protocol/inbox.js";
 
 describe("task tools", () => {
   let tmpDir: string;
@@ -397,6 +398,36 @@ describe("task tools", () => {
       expect(rejectEntry).toBeTruthy();
       expect(rejectEntry.agent).toBe("lead");
       expect(rejectEntry.detail).toBe("Not good enough");
+    });
+
+    it("sends feedback message to assigned arm's inbox", async () => {
+      db.insertTask(missionId, 1, []);
+      const missionPath = join(tmpDir, "missions", missionId);
+      writeTaskFile(
+        missionPath,
+        { id: 1, status: "pending", assigned_to: null, blocked_by: [], scope: [], prior_tasks: [], created_at: Date.now(), claimed_at: null, completed_at: null },
+        "Reject inbox test",
+        "Test"
+      );
+      mkdirSync(join(missionPath, "inbox", "arm-1"), { recursive: true });
+
+      db.claimTask(missionId, 1, "arm-1");
+      db.completeTask(missionId, 1, "arm-1", true);
+
+      await client.callTool({
+        name: "reject_task",
+        arguments: {
+          mission_id: missionId,
+          task_id: 1,
+          agent_id: "lead",
+          feedback: "Needs more tests",
+        },
+      });
+
+      const messages = readMessages(missionPath, "arm-1");
+      expect(messages).toHaveLength(1);
+      expect(messages[0].body).toContain("Needs more tests");
+      expect(messages[0].from).toBe("lead");
     });
   });
 });

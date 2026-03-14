@@ -5,6 +5,7 @@ import type { TeamDB } from "../db.js";
 import { agentIdSchema } from "../types.js";
 import { findTaskFile, updateTaskFileFrontmatter } from "../../protocol/mission.js";
 import { appendAuditEntry } from "../../protocol/audit.js";
+import { writeMessage } from "../../protocol/inbox.js";
 
 export function registerTaskTools(server: McpServer, db: TeamDB, basePath: string): void {
   server.tool(
@@ -93,6 +94,9 @@ export function registerTaskTools(server: McpServer, db: TeamDB, basePath: strin
             updateTaskFileFrontmatter(filePath, { status: "in_progress", completed_at: null });
           }
           appendAuditEntry(missionPath, { ts: Date.now(), agent: agent_id, action: "task_reject", task_id, detail: feedback });
+          if (task.assigned_to) {
+            writeMessage(missionPath, task.assigned_to, agent_id, feedback);
+          }
         } catch { /* Non-fatal */ }
         return { content: [{ type: "text", text: JSON.stringify(task) }] };
       } catch (e: unknown) {
