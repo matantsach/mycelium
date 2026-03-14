@@ -21,8 +21,23 @@ await Promise.all([
   }),
   build({
     ...shared,
-    entryPoints: ["src/hooks/nudge-messages.ts"],
-    outfile: "dist/hooks/nudge-messages.js",
+    entryPoints: ["src/hooks/scope-enforcer.ts"],
+    outfile: "dist/hooks/scope-enforcer.js",
+  }),
+  build({
+    ...shared,
+    entryPoints: ["src/hooks/passive-monitor.ts"],
+    outfile: "dist/hooks/passive-monitor.js",
+  }),
+  build({
+    ...shared,
+    entryPoints: ["src/hooks/checkpoint.ts"],
+    outfile: "dist/hooks/checkpoint.js",
+  }),
+  build({
+    ...shared,
+    entryPoints: ["src/hooks/arm-cleanup.ts"],
+    outfile: "dist/hooks/arm-cleanup.js",
   }),
 ]);
 
