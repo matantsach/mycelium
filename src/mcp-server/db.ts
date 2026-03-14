@@ -90,13 +90,30 @@ export class TeamDB {
   }
 
   claimTask(missionId: string, taskId: number, agentId: string): Task {
+    return this.reconcileAndClaimTask(missionId, taskId, agentId);
+  }
+
+  reconcileAndClaimTask(
+    missionId: string,
+    taskId: number,
+    agentId: string,
+    fsData?: { blockedBy: number[] }
+  ): Task {
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      const task = this.getTask(missionId, taskId);
+      let task = this.getTask(missionId, taskId);
+      if (!task && fsData) {
+        this.insertTask(missionId, taskId, fsData.blockedBy);
+        for (const blockerId of fsData.blockedBy) {
+          if (!this.getTask(missionId, blockerId)) {
+            this.insertTask(missionId, blockerId, []);
+          }
+        }
+        task = this.getTask(missionId, taskId);
+      }
       if (!task) throw new Error(`Task ${taskId} not found in mission ${missionId}`);
       if (task.status !== "pending") throw new Error(`Task ${taskId} is ${task.status}, cannot claim`);
 
-      // Check blockers
       if (task.blocked_by.length > 0) {
         for (const bid of task.blocked_by) {
           const blocker = this.getTask(missionId, bid);

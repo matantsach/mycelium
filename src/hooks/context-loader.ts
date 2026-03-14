@@ -135,4 +135,15 @@ if (agentId && missionId) {
     console.log("[mycelium] Active missions:");
     for (const m of active) console.log(`  ${m.id}: ${m.goal}`);
   }
+
+  // Load captain.md if it exists
+  const captainFile = join(basePath, "captain.md");
+  if (existsSync(captainFile)) {
+    const captainContent = readFileSync(captainFile, "utf-8");
+    const bodyMatch = captainContent.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
+    if (bodyMatch && bodyMatch[1].trim()) {
+      console.log("\n--- Captain State ---");
+      console.log(bodyMatch[1].trim());
+    }
+  }
 }

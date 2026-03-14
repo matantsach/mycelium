@@ -116,6 +116,51 @@ describe("task tools", () => {
       expect(data.assigned_to).toBe("arm-1");
     });
 
+    it("reconciles filesystem-only task into SQLite on claim", async () => {
+      const missionPath = join(tmpDir, "missions", missionId);
+      // Write task file to filesystem WITHOUT inserting into SQLite
+      writeTaskFile(missionPath, { id: 1, status: "pending", blocked_by: [] }, "FS Only Task", "This task exists only on filesystem");
+
+      const result = await client.callTool({
+        name: "claim_task",
+        arguments: { mission_id: missionId, task_id: 1, agent_id: "arm-1" },
+      });
+      expect(result.isError).toBeFalsy();
+      const task = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+      expect(task.status).toBe("in_progress");
+      expect(task.assigned_to).toBe("arm-1");
+    });
+
+    it("reconciles filesystem-only blocked task and rejects claim", async () => {
+      const missionPath = join(tmpDir, "missions", missionId);
+      // Write task 1 (unblocked) and task 2 (blocked_by: [1]) to filesystem only
+      writeTaskFile(missionPath, { id: 1, status: "pending", blocked_by: [] }, "Task One", "First task");
+      writeTaskFile(missionPath, { id: 2, status: "pending", blocked_by: [1] }, "Task Two", "Second task blocked by first");
+
+      const result = await client.callTool({
+        name: "claim_task",
+        arguments: { mission_id: missionId, task_id: 2, agent_id: "arm-1" },
+      });
+      expect(result.isError).toBe(true);
+      const text = (result.content as Array<{ text: string }>)[0].text;
+      expect(text).toContain("blocked");
+    });
+
+    it("claims normally when task exists in both SQLite and filesystem", async () => {
+      const missionPath = join(tmpDir, "missions", missionId);
+      // Insert into BOTH SQLite and filesystem
+      db.insertTask(missionId, 1, []);
+      writeTaskFile(missionPath, { id: 1, status: "pending", blocked_by: [] }, "Both Task", "Exists in both");
+
+      const result = await client.callTool({
+        name: "claim_task",
+        arguments: { mission_id: missionId, task_id: 1, agent_id: "arm-1" },
+      });
+      expect(result.isError).toBeFalsy();
+      const task = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+      expect(task.status).toBe("in_progress");
+    });
+
     it("appends audit entry on claim", async () => {
       const missionPath = join(tmpDir, "missions", missionId);
       db.insertTask(missionId, 1, []);

@@ -61,6 +61,52 @@ describe("context-loader hook", () => {
     });
     expect(output.trim()).toBe("");
   });
+
+  it("loads captain.md attention queue in captain mode", () => {
+    // Create an active mission (required for captain output)
+    const mPath = join(tmpBase, "missions", "m1");
+    initMissionDir(mPath);
+    writeMissionFile(mPath, {
+      id: "m1",
+      status: "active",
+      created_at: Date.now(),
+    }, "Test mission goal");
+
+    // Write captain.md at the base path with attention queue content
+    const captainContent = stringifyFrontmatter(
+      { type: "captain_state", updated_at: Date.now() },
+      "## Attention Queue\n\n- arm-1 stale: no update in 2h"
+    );
+    writeFileSync(join(tmpBase, "captain.md"), captainContent, "utf-8");
+
+    const output = execSync(`npx tsx src/hooks/context-loader.ts`, {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+      env: { ...process.env, MYCELIUM_BASE_PATH: tmpBase },
+    });
+    expect(output).toContain("Attention Queue");
+    expect(output).toContain("arm-1 stale");
+  });
+
+  it("is silent about captain.md when file does not exist", () => {
+    // Create an active mission
+    const mPath = join(tmpBase, "missions", "m1");
+    initMissionDir(mPath);
+    writeMissionFile(mPath, {
+      id: "m1",
+      status: "active",
+      created_at: Date.now(),
+    }, "Test mission goal");
+
+    // Do NOT write captain.md
+    const output = execSync(`npx tsx src/hooks/context-loader.ts`, {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+      env: { ...process.env, MYCELIUM_BASE_PATH: tmpBase },
+    });
+    expect(output).toContain("m1");
+    expect(output).not.toContain("Attention Queue");
+  });
 });
 
 describe("arm session context loading", () => {

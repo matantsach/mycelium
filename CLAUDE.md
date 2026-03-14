@@ -64,7 +64,7 @@ blocked → pending (auto-unblock when dependencies complete)
 
 All hooks use `process.env.MYCELIUM_BASE_PATH || ~/.mycelium` for testability. Hooks avoid the `yaml` package — use regex/line-by-line parsing.
 
-- `context-loader.ts` — `sessionStart`; captain mode lists active missions, arm mode loads task details + inbox + knowledge + checkpoint
+- `context-loader.ts` — `sessionStart`; captain mode lists active missions + loads `captain.md` attention queue, arm mode loads task details + inbox + knowledge + checkpoint
 - `scope-enforcer.ts` — `preToolUse`; enforces file-scope per arm based on task's `scope` field
 - `passive-monitor.ts` — `postToolUse`; captain mode detects stale arms/needs-review/all-complete, arm mode shows unread/priority messages
 - `checkpoint.ts` — `sessionEnd`; writes checkpoint to in-progress task file for crash recovery
@@ -73,6 +73,8 @@ All hooks use `process.env.MYCELIUM_BASE_PATH || ~/.mycelium` for testability. H
 ### Skills, Agents, Scripts
 
 - `skills/focus/SKILL.md` — Focus Mode (single-arm fire-and-forget)
+- `skills/captain/SKILL.md` — Captain judgment engine, decomposition, monitoring, question resolution
+- `skills/team-review/SKILL.md` — Mission retrospective and merge workflow
 - `skills/team-coordinate/SKILL.md` — Filesystem protocol conventions (loaded for arm sessions)
 - `agents/teammate.agent.md` — arm agent prompt (filesystem-first)
 - `scripts/spawn-teammate.sh` — git worktree + tmux spawner
@@ -84,6 +86,7 @@ All hooks use `process.env.MYCELIUM_BASE_PATH || ~/.mycelium` for testability. H
 - **Error handling in tools**: return `{ isError: true, content: [{ type: "text", text: message }] }`; DB methods throw
 - **Authorization**: lead-only operations (`approve_task`, `reject_task`) enforced in the DB layer
 - **Dual-write**: MCP tools write both SQLite (status authority) and filesystem (content authority)
+- **Lazy reconciliation**: `claim_task` auto-creates SQLite rows from filesystem task files on first claim (supports captain creating tasks via filesystem only)
 - **JSON fields**: `tasks.blocked_by` stored as JSON string, parsed in getTask
 
 ## Testing Patterns
@@ -100,7 +103,7 @@ Tests live in `__tests__/` directories adjacent to source.
 
 - **Phase 1** (shipped v0.5.0): Foundation — global state, Focus Mode, context-loader hook
 - **Phase 2** (shipped): Protocol migration — dual-write, audit logging, inbox messaging, scope enforcement, crash recovery, passive monitoring, arm cleanup
-- **Phase 3**: Captain intelligence — judgment engine, attention management
+- **Phase 3** (shipped): Captain intelligence — captain skill, team-review skill, claim_task reconciliation, captain.md lifecycle
 - **Phase 4**: Mycelium knowledge — cross-session learning, multi-runtime adapters
 
 ## Adding a New MCP Tool
