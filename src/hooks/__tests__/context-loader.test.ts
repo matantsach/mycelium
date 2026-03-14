@@ -88,6 +88,28 @@ describe("context-loader hook", () => {
     expect(output).toContain("arm-1 stale");
   });
 
+  it("loads Tier 3 global knowledge in captain session", () => {
+    const mPath = join(tmpBase, "missions", "m1");
+    initMissionDir(mPath);
+    writeMissionFile(mPath, { id: "m1", status: "active", created_at: Date.now() }, "Test goal");
+
+    const globalDir = join(tmpBase, "knowledge");
+    mkdirSync(globalDir, { recursive: true });
+    const globalContent = stringifyFrontmatter(
+      { type: "knowledge", updated_at: Date.now() },
+      "## Global Tip\n\nSomething important."
+    );
+    writeFileSync(join(globalDir, "_global.md"), globalContent, "utf-8");
+
+    const output = execSync(`npx tsx src/hooks/context-loader.ts`, {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+      env: { ...process.env, MYCELIUM_BASE_PATH: tmpBase },
+    });
+    expect(output).toContain("Global Knowledge");
+    expect(output).toContain("Global Tip");
+  });
+
   it("is silent about captain.md when file does not exist", () => {
     // Create an active mission
     const mPath = join(tmpBase, "missions", "m1");
@@ -228,6 +250,56 @@ describe("arm session context loading", () => {
     const output = runHook();
     expect(output).toContain("Prior Task 1 Output");
     expect(output).toContain("schema migration successfully");
+  });
+
+  it("loads Tier 3 global knowledge in arm session", () => {
+    const mPath = setupMission();
+    const taskContent = stringifyFrontmatter(
+      { id: 1, assigned_to: "arm-1", status: "in_progress" },
+      "# Task\n\nDo work."
+    );
+    writeFileSync(join(mPath, "tasks", "001-task.md"), taskContent, "utf-8");
+
+    const globalDir = join(tmpBase, "knowledge");
+    mkdirSync(globalDir, { recursive: true });
+    const globalContent = stringifyFrontmatter(
+      { type: "knowledge", updated_at: Date.now() },
+      "## SQLite Pattern\n\nAlways use BEGIN IMMEDIATE."
+    );
+    writeFileSync(join(globalDir, "_global.md"), globalContent, "utf-8");
+
+    const output = runHook();
+    expect(output).toContain("Global Knowledge");
+    expect(output).toContain("SQLite Pattern");
+    expect(output).toContain("BEGIN IMMEDIATE");
+  });
+
+  it("loads Tier 3 repo knowledge when mission has repo field", () => {
+    const mPath = join(tmpBase, "missions", "m1");
+    initMissionDir(mPath);
+    const missionContent = stringifyFrontmatter(
+      { id: "m1", status: "active", repo: "/my/project", created_at: Date.now() },
+      "# Build the feature"
+    );
+    writeFileSync(join(mPath, "mission.md"), missionContent, "utf-8");
+
+    const taskContent = stringifyFrontmatter(
+      { id: 1, assigned_to: "arm-1", status: "in_progress" },
+      "# Task\n\nDo work."
+    );
+    writeFileSync(join(mPath, "tasks", "001-task.md"), taskContent, "utf-8");
+
+    const repoDir = join(tmpBase, "knowledge", "repos");
+    mkdirSync(repoDir, { recursive: true });
+    const repoContent = stringifyFrontmatter(
+      { type: "knowledge", updated_at: Date.now() },
+      "## Repo Tip\n\nAlways rebuild dist/."
+    );
+    writeFileSync(join(repoDir, "my-project.md"), repoContent, "utf-8");
+
+    const output = runHook();
+    expect(output).toContain("Repo Knowledge");
+    expect(output).toContain("Repo Tip");
   });
 
   it("loads knowledge files", () => {

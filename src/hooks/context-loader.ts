@@ -108,6 +108,33 @@ if (agentId && missionId) {
       if (bodyMatch && bodyMatch[1].trim()) console.log(bodyMatch[1].trim());
     }
   }
+
+  // Load Tier 3 repo knowledge (arm session)
+  const missionContent = readFileSync(join(mPath, "mission.md"), "utf-8");
+  const repoField = parseFmField(missionContent, "repo");
+  if (repoField) {
+    const repoSlug = repoField
+      .replace(/^\//, "")
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .toLowerCase();
+    const lastSegment = repoField.split("/").filter(Boolean).pop();
+    const candidates = [
+      join(basePath, "knowledge", "repos", `${repoSlug}.md`),
+      ...(lastSegment ? [join(basePath, "knowledge", "repos", `${lastSegment}.md`)] : []),
+    ];
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) {
+        const content = readFileSync(candidate, "utf-8");
+        const bodyMatch = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
+        if (bodyMatch && bodyMatch[1].trim()) {
+          console.log("\n--- Repo Knowledge ---");
+          console.log(bodyMatch[1].trim());
+        }
+        break;
+      }
+    }
+  }
 } else {
   // CAPTAIN SESSION
   if (!existsSync(missionsDir)) process.exit(0);
@@ -145,5 +172,16 @@ if (agentId && missionId) {
       console.log("\n--- Captain State ---");
       console.log(bodyMatch[1].trim());
     }
+  }
+}
+
+// Load Tier 3 global knowledge (all sessions)
+const globalKnowledgePath = join(basePath, "knowledge", "_global.md");
+if (existsSync(globalKnowledgePath)) {
+  const content = readFileSync(globalKnowledgePath, "utf-8");
+  const bodyMatch = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/);
+  if (bodyMatch && bodyMatch[1].trim()) {
+    console.log("\n--- Global Knowledge ---");
+    console.log(bodyMatch[1].trim());
   }
 }
