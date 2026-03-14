@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/matantsach/mycelium/compare/mycelium-v0.7.0...mycelium-v0.8.0) (2026-03-14)
+
+
+### Features
+
+* Phase 4 — Mycelium Knowledge + Runtime Adapters ([#8](https://github.com/matantsach/mycelium/issues/8)) ([fd55458](https://github.com/matantsach/mycelium/commit/fd5545815aa663aa145f26366c14bc00f2b7e858))
+
 ## [0.7.0](https://github.com/matantsach/mycelium/compare/mycelium-v0.6.0...mycelium-v0.7.0) (2026-03-14)
 
 
