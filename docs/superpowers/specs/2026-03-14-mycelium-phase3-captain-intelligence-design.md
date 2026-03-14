@@ -32,15 +32,26 @@ The captain is pure prompt — no TypeScript judgment code. Decision logic lives
 
 1. **Captain is a skill, not an agent.** The captain operates in the human's main session (not spawned), so it's a skill (`skills/captain/SKILL.md`), not an agent definition. The spec's `agents/captain.agent.md` becomes this skill.
 
-2. **Pure prompt-based judgment.** No TypeScript decision engine. The judgment table, decomposition protocol, monitoring behavior, and question resolution logic all live in the captain skill markdown. This enables rapid iteration via prompt editing, not code deploys.
+2. **Pure prompt-based judgment.** No TypeScript decision engine. The judgment table, decomposition protocol, monitoring behavior, and question resolution logic all live in the captain skill markdown. This enables rapid iteration via prompt editing, not code deploys. Trade-off: DAG validation (cycle detection, scope overlap) is LLM-dependent, not programmatic. The scope-enforcer hook provides a runtime safety net for scope violations.
 
 3. **Captain uses existing tools.** No new MCP tools or TypeScript modules. The captain uses `create_team` MCP for mission creation, filesystem writes for task files, existing runtime adapters for spawning, and inbox protocol for communication. All orchestration is prompt-driven.
 
 4. **Captain defers to user's workflow.** The captain does not prescribe brainstorming or debugging methodology. If the user has a brainstorming skill, the captain uses it. If they use plan mode, the captain uses that. The captain adds coordination, not methodology.
 
-5. **No knowledge layer.** Captain resolves arm questions from task context, other arms' progress/output, and codebase only. No Tier 2/3 knowledge reads or writes. Phase 4 builds the full knowledge lifecycle.
+5. **No knowledge layer.** Captain resolves arm questions from task context, other arms' progress/output, and codebase only. No Tier 2/3 knowledge reads or writes. Phase 4 builds the full knowledge lifecycle. (The parent spec's escalation model includes Tier 2/3 knowledge as step 3 — that step is deferred to Phase 4.)
 
-6. **No budget tracking.** CLI agents don't expose standardized token/cost counters. Deferred until runtimes provide better metrics.
+6. **No budget tracking.** CLI agents don't expose standardized token/cost counters. Deferred until runtimes provide better metrics. (The parent spec's `captain.md` format includes a Budget section — omitted in Phase 3.)
+
+## Deviations from Parent Spec
+
+The parent spec (`2026-03-13-octopus-on-mycelium-design.md`) defines the full system vision. Phase 3 deviates in these areas:
+
+| Parent spec says | Phase 3 does instead | Rationale |
+|---|---|---|
+| `agents/captain.agent.md` (agent file) | `skills/captain/SKILL.md` (skill) | Captain operates in human's session, not spawned — skill is the correct delivery mechanism |
+| Captain invokes `brainstorming` and `debugging` skills | Captain uses whatever workflow tools the user already has | Avoids duplicating skills that may already exist in the user's setup; captain adds coordination, not methodology |
+| Escalation checks Tier 2/3 knowledge | Escalation checks task context + codebase only | Knowledge layer is Phase 4 |
+| `captain.md` includes Budget section | `captain.md` has no Budget section | Budget tracking deferred |
 
 ## Architecture
 
@@ -51,6 +62,18 @@ The captain is pure prompt — no TypeScript judgment code. Decision logic lives
 **Layer 2: The Captain** — intelligent orchestration in the human's session. Reads/writes the same protocol files as any arm. Intelligence comes from skills and prompt engineering, not privileged access.
 
 Phase 3 implements Layer 2.
+
+### Execution Model
+
+The captain skill is loaded into the human's main session. It is not a background process — it operates within the session's normal tool-call loop. This means:
+
+1. **Captain activates on user request.** The user invokes `/captain` explicitly, or the captain skill is loaded and recognizes work that needs delegation. The captain then drives the session (decomposition, spawning, etc.).
+
+2. **Captain reacts to hook signals passively.** The `postToolUse` passive-monitor hook prints signals (stale arm, needs_review, all-complete) into the session's output after every tool call. When the captain skill is loaded, the agent sees these signals and acts on them per the judgment table. Between captain actions, the human can do their own work — the hook signals appear regardless and the captain addresses them when it sees them.
+
+3. **Captain is not always-on.** If the human starts a new session without loading the captain skill, they still see passive-monitor signals but won't get captain intelligence acting on them. The human would need to invoke `/captain` or load the skill to re-engage. Crash recovery via `captain.md` ensures the captain can pick up state from a previous session.
+
+This model matches how skills work in general: they're loaded into the session context and guide the agent's behavior, but they don't run autonomously outside the session.
 
 ### New Files
 
@@ -64,6 +87,7 @@ Phase 3 implements Layer 2.
 | File | Change |
 |---|---|
 | `src/hooks/context-loader.ts` | Captain mode additionally loads `captain.md` (attention queue + crash recovery) |
+| `src/mcp-server/tools/tasks.ts` | `claim_task` reconciles filesystem-only tasks into SQLite on first claim |
 | `plugin.json` | Register captain and team-review skills |
 
 ### Runtime Artifacts (Written by Captain, Not Code)
@@ -82,9 +106,9 @@ The captain's core intelligence is recognizing what kind of response each signal
 | Signal | Captain Action |
 |---|---|
 | User says "implement feature X" | Use user's existing design/brainstorming workflow if available, then decompose into task DAG, spawn arms |
-| User says "investigate/fix bug X" | Assess complexity — simple → Focus Mode, complex → decompose into investigation + fix arms |
+| User says "investigate/fix bug X" | Assess complexity — simple → invoke `/focus`, complex → decompose into investigation + fix arms |
 | User says "refactor X to Y" | Decompose directly (pattern is clear), spawn arms |
-| User says "run tests and fix" | Focus Mode (single arm, fire-and-forget) |
+| User says "run tests and fix" | Invoke `/focus` skill (single arm, fire-and-forget) |
 | Arm sends question about its own task | Captain resolves from task context + codebase |
 | Arm sends question about another arm's work | Captain reads other arm's progress + output, synthesizes answer |
 | Arm says "approach won't work, need arch change" | Captain escalates to human — strategic decision |
@@ -129,6 +153,14 @@ After decomposition, the captain orchestrates arm spawning using existing infras
 4. Spawn arms for unblocked tasks via runtime adapter (worktrees + tmux)
 5. Arms load context via `sessionStart` hook, claim tasks via `claim_task` MCP
 6. As tasks complete and unblock downstream tasks, captain spawns next batch
+
+### Task Creation and Dual-Write
+
+The parent spec defines a dual-write rule: SQLite is authority for status transitions, filesystem is authority for content. Task creation presents a challenge: the captain writes task files to filesystem (prompt-driven), but `claim_task` MCP needs the task to exist in SQLite.
+
+**Resolution:** `claim_task` reconciles on first claim. If a task file exists on filesystem but has no SQLite row, `claim_task` reads the task file's frontmatter and creates the SQLite row before processing the claim — all within the same `BEGIN IMMEDIATE` transaction. This keeps task creation as a filesystem-only operation (no new MCP tools) while maintaining SQLite atomicity for claims.
+
+This is consistent with the parent spec's principle: "the filesystem remains the source of truth for full task content, but SQLite provides the atomicity layer." SQLite lazily picks up tasks from the filesystem when atomicity is first needed (at claim time).
 
 ### Monitoring Behavior
 
@@ -185,6 +217,16 @@ updated_at: 1741000000
 - Read by `sessionStart` context-loader in captain mode
 - Read by captain on resume after crash/terminal close (crash recovery)
 
+**Captain crash recovery flow:**
+1. Human's terminal closes or session ends while missions are active
+2. Human starts a new session — `sessionStart` hook loads `captain.md` (attention queue + active missions)
+3. Human invokes `/captain` or sees hook signals and re-engages
+4. Captain reads each active mission's current state (task statuses, member statuses, inbox)
+5. For stale/dead arms: captain checks if arm's task has a checkpoint (written by `sessionEnd` hook) — if so, the arm can be re-spawned and will resume from checkpoint
+6. Captain updates `captain.md` with refreshed state and continues monitoring
+
+`captain.md` is human-readable markdown — the captain reads it as context, not parsed by code. The context-loader hook outputs its contents verbatim into the session.
+
 ## Team-Review Skill (`skills/team-review/SKILL.md`)
 
 Invoked when all tasks in a mission complete.
@@ -194,7 +236,11 @@ Invoked when all tasks in a mission complete.
 1. Reads each completed task file's Output section (files changed, tests added, decisions made, open questions)
 2. Generates a retrospective summary for the human — what was done, what decisions were made, any open questions across arms
 3. Writes `retrospective.md` to the mission directory
-4. Guides the human through the merge workflow — arms worked in git worktrees, captain helps understand what to merge and in what order (respecting original DAG dependencies)
+4. Presents merge plan to the human:
+   - Lists worktrees in DAG dependency order (merge upstream tasks first)
+   - For each worktree: summarizes changes, flags potential conflicts with other worktrees
+   - Human performs the actual merges (captain suggests order, human executes)
+   - If conflicts arise, captain can help resolve based on task context
 5. Updates `mission.md` status to `completed`
 6. Updates `captain.md` to remove the mission from active list
 
@@ -294,3 +340,5 @@ Since the captain is pure prompt (no TypeScript modules), testing is focused on:
 | Captain doesn't activate when it should | Judgment table covers common patterns. User can always invoke `/captain` explicitly. |
 | Crash recovery incomplete | `captain.md` + existing checkpoint system cover both captain and arm recovery paths. |
 | User's existing skills conflict with captain flow | Captain defers to user's tools. It orchestrates around them, not over them. |
+| DAG validation is LLM-dependent (not programmatic) | Decomposition checklist provides structured rules. Scope enforcer catches file-level violations at runtime. If LLM reliability proves insufficient, targeted validation code can be added later without changing the architecture. |
+| Captain requires active session to monitor | `captain.md` persists state across sessions. Passive-monitor signals accumulate. Human can re-engage captain at any time and it catches up from filesystem state. |
