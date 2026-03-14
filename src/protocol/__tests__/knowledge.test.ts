@@ -8,7 +8,11 @@ import {
   knowledgePath,
   promoteKnowledge,
   collectTier1Entries,
+  promoteToGlobal,
+  promoteToRepo,
+  loadRelevantKnowledge,
 } from "../knowledge.js";
+import { initBasePath } from "../dirs.js";
 import { initMissionDir } from "../mission.js";
 import { parseFrontmatter } from "../frontmatter.js";
 
@@ -172,6 +176,101 @@ describe("knowledge protocol", () => {
       const all = collectTier1Entries(mPath);
       expect(all).toHaveLength(2);
       expect(all.map((e) => e.heading).sort()).toEqual(["A", "B"]);
+    });
+  });
+
+  describe("Tier 3 operations", () => {
+    it("promotes entries to global knowledge", () => {
+      initBasePath(tmpDir);
+      promoteToGlobal(tmpDir, {
+        heading: "SQLite Pattern",
+        content: "Use BEGIN IMMEDIATE.\nSource: missions m1, m3",
+        tags: ["sqlite"],
+      });
+      const globalPath = join(tmpDir, "knowledge", "_global.md");
+      const entries = readKnowledgeEntries(globalPath);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].heading).toBe("SQLite Pattern");
+    });
+
+    it("promotes entries to repo-specific knowledge", () => {
+      initBasePath(tmpDir);
+      promoteToRepo(tmpDir, "/Users/dev/my-project", {
+        heading: "Build Convention",
+        content: "Always run npm run build after changes.",
+      });
+      const repoPath = join(tmpDir, "knowledge", "repos", "users-dev-my-project.md");
+      expect(existsSync(repoPath)).toBe(true);
+      const entries = readKnowledgeEntries(repoPath);
+      expect(entries).toHaveLength(1);
+      expect(entries[0].heading).toBe("Build Convention");
+    });
+  });
+
+  describe("loadRelevantKnowledge", () => {
+    it("loads Tier 3 global knowledge for any session", () => {
+      initBasePath(tmpDir);
+      promoteToGlobal(tmpDir, { heading: "Global Tip", content: "Important." });
+      const result = loadRelevantKnowledge(tmpDir, {});
+      expect(result).toHaveLength(1);
+      expect(result[0].heading).toBe("Global Tip");
+    });
+
+    it("loads Tier 3 repo knowledge when repo is specified", () => {
+      initBasePath(tmpDir);
+      promoteToRepo(tmpDir, "/my/repo", { heading: "Repo Tip", content: "Specific." });
+      const result = loadRelevantKnowledge(tmpDir, { repo: "/my/repo" });
+      expect(result.some((e) => e.heading === "Repo Tip")).toBe(true);
+    });
+
+    it("loads Tier 2 shared knowledge for mission context", () => {
+      initBasePath(tmpDir);
+      const mPath = join(tmpDir, "missions", "m1");
+      initMissionDir(mPath);
+      writeKnowledgeEntry(join(mPath, "knowledge", "_shared.md"), {
+        heading: "Mission Tip",
+        content: "Useful.",
+        tags: ["src/auth/"],
+      });
+      const result = loadRelevantKnowledge(tmpDir, { missionId: "m1" });
+      expect(result.some((e) => e.heading === "Mission Tip")).toBe(true);
+    });
+
+    it("filters Tier 2 by task scope when scope provided", () => {
+      initBasePath(tmpDir);
+      const mPath = join(tmpDir, "missions", "m1");
+      initMissionDir(mPath);
+      writeKnowledgeEntry(join(mPath, "knowledge", "_shared.md"), {
+        heading: "Auth Tip",
+        content: "Auth detail.",
+        tags: ["src/auth/"],
+      });
+      writeKnowledgeEntry(join(mPath, "knowledge", "_shared.md"), {
+        heading: "Payment Tip",
+        content: "Payment detail.",
+        tags: ["src/payments/"],
+      });
+      const result = loadRelevantKnowledge(tmpDir, {
+        missionId: "m1",
+        taskScope: ["src/auth/**"],
+      });
+      expect(result.some((e) => e.heading === "Auth Tip")).toBe(true);
+      expect(result.some((e) => e.heading === "Payment Tip")).toBe(false);
+    });
+
+    it("loads Tier 1 for own agent when agentId provided", () => {
+      initBasePath(tmpDir);
+      const mPath = join(tmpDir, "missions", "m1");
+      initMissionDir(mPath);
+      writeKnowledgeEntry(join(mPath, "knowledge", "arm-1.md"), {
+        heading: "My Note",
+        content: "Personal discovery.",
+      });
+      const result = loadRelevantKnowledge(tmpDir, {
+        missionId: "m1",
+        agentId: "arm-1",
+      });
+      expect(result.some((e) => e.heading === "My Note")).toBe(true);
     });
   });
 });

@@ -111,3 +111,73 @@ export function promoteKnowledge(
     writeKnowledgeEntry(sharedPath, entry);
   }
 }
+
+export function promoteToGlobal(basePath: string, entry: KnowledgeEntry): void {
+  const globalPath = join(basePath, "knowledge", "_global.md");
+  writeKnowledgeEntry(globalPath, entry);
+}
+
+export function promoteToRepo(basePath: string, repo: string, entry: KnowledgeEntry): void {
+  const repoPath = knowledgePath(basePath, { tier: 3, repo });
+  writeKnowledgeEntry(repoPath, entry);
+}
+
+function scopeOverlaps(entryTags: string[], taskScope: string[]): boolean {
+  for (const tag of entryTags) {
+    for (const scope of taskScope) {
+      // Simple prefix matching: tag "src/auth/" overlaps scope "src/auth/**"
+      const scopeBase = scope.replace(/\*+$/, "").replace(/\/$/, "");
+      const tagBase = tag.replace(/\/$/, "");
+      if (tagBase.startsWith(scopeBase) || scopeBase.startsWith(tagBase)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function loadRelevantKnowledge(
+  basePath: string,
+  opts: {
+    missionId?: string;
+    agentId?: string;
+    taskScope?: string[];
+    repo?: string;
+  }
+): KnowledgeEntry[] {
+  const entries: KnowledgeEntry[] = [];
+
+  // Tier 3 global — always loaded
+  const globalPath = join(basePath, "knowledge", "_global.md");
+  entries.push(...readKnowledgeEntries(globalPath));
+
+  // Tier 3 repo — loaded when repo is specified
+  if (opts.repo) {
+    const repoPath = knowledgePath(basePath, { tier: 3, repo: opts.repo });
+    entries.push(...readKnowledgeEntries(repoPath));
+  }
+
+  // Tier 2 shared — loaded when missionId is specified
+  if (opts.missionId) {
+    const missionPath = join(basePath, "missions", opts.missionId);
+    const sharedEntries = readKnowledgeEntries(join(missionPath, "knowledge", "_shared.md"));
+
+    if (opts.taskScope?.length) {
+      // Filter by scope overlap — entries without tags are treated as universal
+      // and always pass through (intentional: untagged entries are general knowledge)
+      entries.push(...sharedEntries.filter((e) =>
+        !e.tags?.length || scopeOverlaps(e.tags, opts.taskScope!)
+      ));
+    } else {
+      entries.push(...sharedEntries);
+    }
+  }
+
+  // Tier 1 own — loaded when both missionId and agentId are specified
+  if (opts.missionId && opts.agentId) {
+    const ownPath = join(basePath, "missions", opts.missionId, "knowledge", `${opts.agentId}.md`);
+    entries.push(...readKnowledgeEntries(ownPath));
+  }
+
+  return entries;
+}
